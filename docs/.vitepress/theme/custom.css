@@ -1,0 +1,124 @@
+/* ── Nuxt-inspired dark theme for nuxt-actions docs ──── */
+
+:root {
+  /* Brand colors — Nuxt green */
+  --vp-c-brand-1: #00DC82;
+  --vp-c-brand-2: #00c974;
+  --vp-c-brand-3: #00b566;
+  --vp-c-brand-soft: rgba(0, 220, 130, 0.14);
+
+  /* Light mode overrides */
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f6f6f7;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #f6f6f7;
+}
+
+.dark {
+  /* Dark background — Nuxt navy */
+  --vp-c-bg: #020420;
+  --vp-c-bg-alt: #0B0C24;
+  --vp-c-bg-elv: #0F1031;
+  --vp-c-bg-soft: #14153A;
+
+  /* Text colors */
+  --vp-c-text-1: #E4E4E7;
+  --vp-c-text-2: #A1A1AA;
+  --vp-c-text-3: #71717A;
+
+  /* Borders */
+  --vp-c-border: #1E1F4A;
+  --vp-c-divider: #1E1F4A;
+  --vp-c-gutter: #14153A;
+
+  /* Sidebar */
+  --vp-sidebar-bg-color: #020420;
+
+  /* Nav */
+  --vp-nav-bg-color: #020420;
+}
+
+/* ── Hero section ──────────────────────────────────────────── */
+
+.VPHero .name {
+  background: linear-gradient(120deg, #00DC82 30%, #36E4DA 70%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.VPHero .tagline {
+  font-size: 1.2rem;
+  line-height: 1.6;
+}
+
+.VPHero .text {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+/* ── Brand button ──────────────────────────────────────────── */
+
+.VPButton.brand {
+  border-color: #00DC82;
+  color: #020420;
+  background-color: #00DC82;
+}
+
+.VPButton.brand:hover {
+  border-color: #00c974;
+  background-color: #00c974;
+}
+
+/* ── Home features ─────────────────────────────────────────── */
+
+.VPFeature {
+  border: 1px solid var(--vp-c-border);
+  transition: border-color 0.3s ease;
+}
+
+.VPFeature:hover {
+  border-color: #00DC82;
+}
+
+/* ── Code blocks ───────────────────────────────────────────── */
+
+.dark .vp-code-group .tabs label.active {
+  color: #00DC82;
+}
+
+.dark div[class*='language-'] {
+  background-color: #0B0C24;
+}
+
+/* ── Sidebar active link ───────────────────────────────────── */
+
+.VPSidebarItem.is-active > .item > .link > .text {
+  color: #00DC82;
+}
+
+/* ── Custom scrollbar for dark mode ────────────────────────── */
+
+.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #020420;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #1E1F4A;
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #00DC82;
+}
+
+/* ── Badge colors ──────────────────────────────────────────── */
+
+.VPBadge.tip {
+  background-color: rgba(0, 220, 130, 0.14);
+  color: #00DC82;
+}

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "./**/*.test-d.ts",
+    "../../src/runtime/types.ts",
+    "./global.d.ts"
+  ]
+}

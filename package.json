@@ -1,0 +1,106 @@
+{
+  "name": "nuxt-actions",
+  "version": "1.0.0",
+  "description": "Type-safe server actions for Nuxt with Standard Schema validation (Zod, Valibot, ArkType), middleware, builder pattern, optimistic updates, SSR queries, streaming, and retry/dedupe",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/billymaulana/nuxt-actions.git"
+  },
+  "homepage": "https://billymaulana.github.io/nuxt-actions/",
+  "bugs": {
+    "url": "https://github.com/billymaulana/nuxt-actions/issues"
+  },
+  "author": "billymaulana",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "nuxt",
+    "nuxt-module",
+    "server-actions",
+    "type-safe",
+    "zod",
+    "valibot",
+    "arktype",
+    "standard-schema",
+    "validation",
+    "middleware",
+    "optimistic-updates",
+    "streaming",
+    "ssr",
+    "retry",
+    "devtools",
+    "vue"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types.d.mts",
+      "import": "./dist/module.mjs"
+    }
+  },
+  "main": "./dist/module.mjs",
+  "typesVersions": {
+    "*": {
+      ".": [
+        "./dist/types.d.mts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "packageManager": "pnpm@10.27.0",
+  "scripts": {
+    "prepack": "nuxt-module-build build",
+    "dev": "npm run dev:prepare && nuxt dev playground",
+    "dev:build": "nuxt build playground",
+    "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
+    "release": "npm run lint && npm run test && npm run prepack && changelogen --release && npm publish && git push --follow-tags",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
+    "test:type-tests": "vitest run --config vitest.config.typecheck.ts",
+    "test:coverage": "vitest run test/unit/ --coverage",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "dependencies": {
+    "@nuxt/kit": "^4.3.1"
+  },
+  "peerDependencies": {
+    "arktype": ">=2.1.0",
+    "valibot": ">=1.0.0",
+    "zod": "^3.24.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    },
+    "valibot": {
+      "optional": true
+    },
+    "arktype": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "^3.2.1",
+    "@nuxt/eslint-config": "^1.15.1",
+    "@nuxt/module-builder": "^1.0.2",
+    "@nuxt/schema": "^4.3.1",
+    "@nuxt/test-utils": "^4.0.0",
+    "@types/node": "latest",
+    "@vitest/coverage-v8": "^4.0.18",
+    "arktype": "^2.1.29",
+    "changelogen": "^0.6.2",
+    "eslint": "^10.0.0",
+    "nuxt": "^4.3.1",
+    "typescript": "~5.9.3",
+    "valibot": "^1.2.0",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.0.18",
+    "vue-tsc": "^3.2.4",
+    "zod": "^4.3.6"
+  }
+}

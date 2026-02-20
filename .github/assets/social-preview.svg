@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#020420"/>
+      <stop offset="100%" stop-color="#0a1628"/>
+    </linearGradient>
+    <linearGradient id="boltGrad" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#4ADE80"/>
+      <stop offset="50%" stop-color="#00DC82"/>
+      <stop offset="100%" stop-color="#00a86b"/>
+    </linearGradient>
+    <linearGradient id="bracketGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00DC82" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#00DC82" stop-opacity="0.3"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <radialGradient id="glowBg" cx="50%" cy="35%" r="35%">
+      <stop offset="0%" stop-color="#00DC82" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#00DC82" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#0a0e2e" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="640" fill="url(#bgGrad)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <rect width="1280" height="640" fill="url(#glowBg)"/>
+
+  <!-- Top accent line -->
+  <rect x="0" y="0" width="1280" height="3" fill="url(#boltGrad)"/>
+
+  <!-- Logo icon (centered above text) -->
+  <g transform="translate(590, 60)">
+    <!-- Rounded square base -->
+    <rect x="0" y="0" width="100" height="100" rx="22" fill="url(#bgGrad)" stroke="#00DC82" stroke-width="1.5" stroke-opacity="0.4"/>
+
+    <!-- Left angle bracket -->
+    <path d="M26 36 L16 50 L26 64" stroke="url(#bracketGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+    <!-- Right angle bracket -->
+    <path d="M74 36 L84 50 L74 64" stroke="url(#bracketGrad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+    <!-- Lightning bolt -->
+    <path d="M56 20 L39 53 L49 53 L44 80 L61 47 L51 47 Z" fill="url(#boltGrad)" filter="url(#glow)"/>
+
+    <!-- Spark particles -->
+    <circle cx="34" cy="28" r="1" fill="#00DC82" opacity="0.5"/>
+    <circle cx="68" cy="74" r="0.8" fill="#4ADE80" opacity="0.4"/>
+  </g>
+
+  <!-- Title -->
+  <text x="640" y="225" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="60" fill="white" text-anchor="middle" letter-spacing="-1">nuxt-actions</text>
+
+  <!-- Subtitle -->
+  <text x="640" y="278" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="22" fill="#8b95b0" text-anchor="middle">Type-safe server actions for Nuxt with Standard Schema validation</text>
+
+  <!-- Feature pills row 1 -->
+  <g transform="translate(640, 320)">
+    <rect x="-350" y="0" width="130" height="36" rx="18" fill="#00DC82" fill-opacity="0.1" stroke="#00DC82" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="-285" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" text-anchor="middle">Standard Schema</text>
+
+    <rect x="-200" y="0" width="120" height="36" rx="18" fill="#00DC82" fill-opacity="0.1" stroke="#00DC82" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="-140" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" text-anchor="middle">Builder Pattern</text>
+
+    <rect x="-60" y="0" width="120" height="36" rx="18" fill="#00DC82" fill-opacity="0.1" stroke="#00DC82" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="0" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" text-anchor="middle">Middleware</text>
+
+    <rect x="80" y="0" width="150" height="36" rx="18" fill="#00DC82" fill-opacity="0.1" stroke="#00DC82" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="155" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" text-anchor="middle">Optimistic Updates</text>
+
+    <rect x="250" y="0" width="100" height="36" rx="18" fill="#00DC82" fill-opacity="0.1" stroke="#00DC82" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="300" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" text-anchor="middle">Streaming</text>
+  </g>
+
+  <!-- Feature pills row 2 -->
+  <g transform="translate(640, 370)">
+    <rect x="-270" y="0" width="120" height="36" rx="18" fill="#00DC82" fill-opacity="0.06" stroke="#00DC82" stroke-width="1" stroke-opacity="0.25"/>
+    <text x="-210" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" fill-opacity="0.7" text-anchor="middle">SSR Queries</text>
+
+    <rect x="-130" y="0" width="110" height="36" rx="18" fill="#00DC82" fill-opacity="0.06" stroke="#00DC82" stroke-width="1" stroke-opacity="0.25"/>
+    <text x="-75" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" fill-opacity="0.7" text-anchor="middle">Retry/Backoff</text>
+
+    <rect x="0" y="0" width="110" height="36" rx="18" fill="#00DC82" fill-opacity="0.06" stroke="#00DC82" stroke-width="1" stroke-opacity="0.25"/>
+    <text x="55" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" fill-opacity="0.7" text-anchor="middle">E2E Types</text>
+
+    <rect x="130" y="0" width="140" height="36" rx="18" fill="#00DC82" fill-opacity="0.06" stroke="#00DC82" stroke-width="1" stroke-opacity="0.25"/>
+    <text x="200" y="23" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#00DC82" fill-opacity="0.7" text-anchor="middle">Security Hardened</text>
+  </g>
+
+  <!-- Schema libraries -->
+  <text x="640" y="465" font-family="system-ui, sans-serif" font-size="17" fill="#6b7280" text-anchor="middle">Works with Zod  ·  Valibot  ·  ArkType  ·  any Standard Schema library</text>
+
+  <!-- Version badge -->
+  <g transform="translate(640, 510)">
+    <rect x="-36" y="0" width="72" height="28" rx="14" fill="#00DC82" fill-opacity="0.15" stroke="#00DC82" stroke-width="1" stroke-opacity="0.3"/>
+    <text x="0" y="19" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#00DC82" text-anchor="middle">v1.0.0</text>
+  </g>
+
+  <!-- Nuxt compatible -->
+  <text x="640" y="575" font-family="system-ui, sans-serif" font-size="15" fill="#4a5568" text-anchor="middle">Compatible with Nuxt 3+ &amp; Nuxt 4</text>
+
+  <!-- Bottom accent line -->
+  <rect x="0" y="637" width="1280" height="3" fill="url(#boltGrad)"/>
+</svg>
