@@ -214,6 +214,41 @@ useAction(slowEndpoint, { dedupe: 'defer' })</pre>
 })</pre>
     </section>
 
+    <!-- Debounce Error Handling Demo -->
+    <section>
+      <h3 style="margin-bottom: 8px;">
+        Debounce Error Handling
+      </h3>
+      <p style="color: #666; font-size: 13px; margin-bottom: 8px;">
+        When a debounced action throws, the error is properly surfaced to the caller instead of being silently swallowed.
+      </p>
+      <button
+        :disabled="debouncedFlaky.isExecuting.value"
+        @click="handleDebouncedFlaky"
+      >
+        {{ debouncedFlaky.isExecuting.value ? 'Calling...' : 'Call Flaky API (debounced 500ms)' }}
+      </button>
+      <div
+        v-if="debouncedFlaky.hasSucceeded.value"
+        class="success"
+      >
+        Success: {{ debouncedFlaky.data.value?.message }}
+      </div>
+      <div
+        v-if="debouncedFlaky.hasErrored.value"
+        class="error"
+      >
+        Error caught: {{ debouncedFlaky.error.value?.message }}
+      </div>
+      <pre>// Errors are properly rejected, not silently lost
+useAction(flakyApi, {
+  debounce: 500,
+  onError(err) {
+    console.log('Error handled:', err.message)
+  },
+})</pre>
+    </section>
+
     <!-- executeAsync Demo -->
     <section>
       <h3 style="margin-bottom: 8px;">
@@ -329,6 +364,15 @@ const outputAction = useAction(validatedOutput)
 
 function handleOutput() {
   outputAction.execute({ name: userName.value, role: userRole.value })
+}
+
+// ── Debounce Error Handling ──
+const debouncedFlaky = useAction(flakyApi, {
+  debounce: 500,
+})
+
+function handleDebouncedFlaky() {
+  debouncedFlaky.execute({ message: 'debounce-error-test' })
 }
 
 // ── executeAsync ──
