@@ -112,26 +112,30 @@ interface UseActionQueryReturn<TOutput> {
 
 ---
 
-## Reactive Cache Keys
+## Cache Keys & Reactivity
 
-Cache keys are generated as getter functions passed to `useAsyncData`, making them **fully reactive**. When input changes, the cache key updates automatically, ensuring:
+Cache keys are generated using the action path and the initial input value, producing a deterministic string passed to `useAsyncData`. When the reactive `input` changes, the `watch` option triggers an automatic refetch.
 
-- Different inputs produce different cache entries
+- Different inputs at initialization produce different cache entries
 - Same inputs (even with different key order) share the same cache
+- Reactive input changes trigger refetch via `useAsyncData`'s `watch` mechanism
 
 ```ts
 const query = ref('hello')
 const { data } = useActionQuery(searchTodos, () => ({ q: query.value }))
 
-// Cache key: "action:/api/_actions/search-todos:{"q":"hello"}"
+// Initial cache key: "action:/api/_actions/search-todos:{"q":"hello"}"
 query.value = 'world'
-// Cache key updates to: "action:/api/_actions/search-todos:{"q":"world"}"
-// → Triggers automatic refetch
+// → watch triggers automatic refetch with new input
 ```
 
 ### Deterministic Serialization
 
 Keys use `stableStringify()` — a deterministic JSON serializer that sorts object keys recursively. This means `{ b: 2, a: 1 }` and `{ a: 1, b: 2 }` produce the same cache key, preventing unnecessary refetches.
+
+### Nuxt Compatibility
+
+Cache keys are passed as strings (not getter functions) to ensure compatibility with Nuxt 3.7+. Getter keys for `useAsyncData` are only supported in Nuxt 3.14+.
 
 ---
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.0.3 (2026-02-21)
+
+### Fixes
+
+- Fix unhandled promise rejection in debounce/throttle when the wrapped function throws
+- Fix middleware chain continuing when `next()` is not called — now breaks the chain instead
+- Fix `useActionQuery` key compatibility with Nuxt 3.7–3.13 (evaluate key eagerly as string)
+- Fix stream reader resource leak in `useStreamAction` (add `releaseLock()` in finally block)
+- Fix TextDecoder incomplete flush after stream loop ends
+
+### Security
+
+- Prototype pollution protection in `formatStandardIssues` (null-prototype object)
+- Error message sanitization for H3 errors (never leak `statusMessage` to client)
+- `isActionError` uses `hasOwnProperty` to prevent prototype chain spoofing
+
+### Docs
+
+- Update middleware docs: clarify `next()` skip behavior (chain breaks, handler still runs)
+
 ## v1.0.2 (2026-02-20)
 
 ### Fixes
