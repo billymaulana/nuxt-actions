@@ -6,7 +6,7 @@
 
 - Widen `@nuxt/kit` dependency range to `^3.7.0 || ^4.0.0` for Nuxt 3.x compatibility
 - Update module compatibility declaration to `^3.7.0 || ^4.0.0`
-- Add `continue-on-error` to release workflow npm publish step
+- Switch release workflow to OIDC trusted publishing (no token rotation needed)
 
 ## v1.0.0 (2026-02-19)
 
