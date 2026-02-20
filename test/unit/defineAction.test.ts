@@ -896,6 +896,93 @@ describe('edge cases', () => {
     })
   })
 
+  it('detects plain error objects with code + message (structural detection)', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const handler = defineAction({
+      handler: async () => {
+        // Throw a plain object with code + message but without __isActionError
+        throw { code: 'NOT_FOUND', message: 'User not found', statusCode: 404 }
+      },
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent())
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'User not found',
+        statusCode: 404,
+      },
+    })
+  })
+
+  it('structural detection requires statusCode (code + message alone is not enough)', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const handler = defineAction({
+      handler: async () => {
+        // Object with code + message but no statusCode should NOT match
+        throw { code: 'DB_ERROR', message: 'connection to postgres://user:pass@host failed' }
+      },
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent())
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'An unexpected error occurred',
+        statusCode: 500,
+      },
+    })
+  })
+
+  it('does NOT treat plain objects with stack as action errors', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const handler = defineAction({
+      handler: async () => {
+        throw { code: 'DB_ERR', message: 'secret connection string', statusCode: 500, stack: 'fake stack' }
+      },
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent())
+    // Has statusCode → matches H3 error path, returns 'Server error' (no statusMessage)
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'SERVER_ERROR',
+        message: 'Server error',
+        statusCode: 500,
+      },
+    })
+  })
+
+  it('does NOT treat Error instances as action errors via structural detection', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const handler = defineAction({
+      handler: async () => {
+        // Error instances have stack traces — they should NOT match structural detection
+        const err = new Error('Secret internal error')
+        ;(err as Error & { code: string }).code = 'ENOENT'
+        throw err
+      },
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent())
+    // Should fall through to INTERNAL_ERROR, not expose the error message
+    expect(result).toMatchObject({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'An unexpected error occurred',
+        statusCode: 500,
+      },
+    })
+  })
+
   it('isActionError uses hasOwnProperty (not prototype chain)', async () => {
     vi.mocked(readBody).mockResolvedValue({})
 

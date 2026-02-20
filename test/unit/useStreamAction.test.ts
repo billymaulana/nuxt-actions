@@ -859,7 +859,7 @@ describe('useStreamAction', () => {
   })
 
   describe('timeout option', () => {
-    it('handles TimeoutError with correct error payload', async () => {
+    it('handles TimeoutError with correct error payload (legacy direct TimeoutError)', async () => {
       const timeoutError = new DOMException('The operation was aborted due to timeout', 'TimeoutError')
       mockFetch.mockRejectedValue(timeoutError)
 
@@ -878,6 +878,68 @@ describe('useStreamAction', () => {
         statusCode: 408,
       })
       expect(onError).toHaveBeenCalledWith(error.value)
+    })
+
+    it('detects timeout via AbortError when setTimeout fires', async () => {
+      // Mock fetch that rejects with AbortError when its signal is aborted
+      mockFetch.mockImplementation((_url: string, opts: RequestInit) => {
+        return new Promise((_, reject) => {
+          const signal = opts.signal!
+          if (signal.aborted) {
+            reject(new DOMException('The operation was aborted', 'AbortError'))
+            return
+          }
+          signal.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted', 'AbortError'))
+          })
+        })
+      })
+
+      const onError = vi.fn()
+      const { execute, status, error } = useStreamAction(createActionRef('stream'), {
+        timeout: 50, // Very short timeout for fast test
+        onError,
+      })
+
+      await execute({})
+
+      expect(status.value).toBe('error')
+      expect(error.value).toEqual({
+        code: 'TIMEOUT_ERROR',
+        message: 'Stream connection timed out after 50ms',
+        statusCode: 408,
+      })
+      expect(onError).toHaveBeenCalled()
+    })
+
+    it('clears timeout when stream completes before timeout', async () => {
+      vi.useFakeTimers()
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+
+      const stream = createSSEStream([
+        'data: {"text":"fast"}',
+        'data: {"__actions_done":true}',
+      ])
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: stream,
+      })
+
+      const { execute, status } = useStreamAction(createActionRef('stream'), {
+        timeout: 30000,
+      })
+
+      await execute({})
+
+      expect(status.value).toBe('done')
+      // The finally block should have cleared the timeout
+      expect(clearTimeoutSpy).toHaveBeenCalled()
+
+      clearTimeoutSpy.mockRestore()
+      vi.useRealTimers()
     })
   })
 })
