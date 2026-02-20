@@ -1,6 +1,6 @@
 {
   "name": "nuxt-actions",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Type-safe server actions for Nuxt with Standard Schema validation (Zod, Valibot, ArkType), middleware, builder pattern, optimistic updates, SSR queries, streaming, and retry/dedupe",
   "repository": {
     "type": "git",
