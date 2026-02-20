@@ -174,70 +174,80 @@ export function useStreamAction(
       const decoder = new TextDecoder()
       let buffer = ''
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
+          buffer += decoder.decode(value, { stream: true })
 
-        // Parse SSE events from buffer
-        const lines = buffer.split('\n')
-        // split() always returns >=1 element, so pop() is guaranteed non-null
-        buffer = lines.pop()!
+          // Parse SSE events from buffer
+          const lines = buffer.split('\n')
+          // split() always returns >=1 element, so pop() is guaranteed non-null
+          buffer = lines.pop()!
 
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed || trimmed.startsWith(':')) continue // Skip empty/comment lines
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed || trimmed.startsWith(':')) continue // Skip empty/comment lines
 
-          let eventData: string | null = null
-          if (trimmed.startsWith('data: ')) {
-            eventData = trimmed.slice(6)
-          }
-          else if (trimmed.startsWith('data:')) {
-            eventData = trimmed.slice(5)
-          }
-
-          if (eventData === null) continue
-
-          try {
-            const parsed = JSON.parse(eventData)
-
-            // Check for error event
-            if (parsed.__actions_error) {
-              error.value = parsed.__actions_error
-              status.value = 'error'
-              options.onError?.(parsed.__actions_error)
-              return
+            let eventData: string | null = null
+            if (trimmed.startsWith('data: ')) {
+              eventData = trimmed.slice(6)
+            }
+            else if (trimmed.startsWith('data:')) {
+              eventData = trimmed.slice(5)
             }
 
-            // Check for done event
-            if (parsed.__actions_done) {
-              status.value = 'done'
-              options.onDone?.(chunks.value)
-              return
-            }
+            if (eventData === null) continue
 
-            // Regular data chunk — mutate in place + trigger for O(1)
-            chunks.value.push(parsed)
-            triggerRef(chunks)
-            data.value = parsed
-            options.onChunk?.(parsed)
-          }
-          catch (parseErr) {
-            // Log parse failures in development to help debug malformed SSE data
-            /* v8 ignore start -- import.meta.dev is a compile-time constant set by Nuxt */
-            if (import.meta.dev) {
-              console.warn('[nuxt-actions] Failed to parse SSE data:', eventData, parseErr)
+            try {
+              const parsed = JSON.parse(eventData)
+
+              // Check for error event
+              if (parsed.__actions_error) {
+                error.value = parsed.__actions_error
+                status.value = 'error'
+                options.onError?.(parsed.__actions_error)
+                return
+              }
+
+              // Check for done event
+              if (parsed.__actions_done) {
+                status.value = 'done'
+                options.onDone?.(chunks.value)
+                return
+              }
+
+              // Regular data chunk — mutate in place + trigger for O(1)
+              chunks.value.push(parsed)
+              triggerRef(chunks)
+              data.value = parsed
+              options.onChunk?.(parsed)
             }
-            /* v8 ignore stop */
+            catch (parseErr) {
+              // Log parse failures in development to help debug malformed SSE data
+              /* v8 ignore start -- import.meta.dev is a compile-time constant set by Nuxt */
+              if (import.meta.dev) {
+                console.warn('[nuxt-actions] Failed to parse SSE data:', eventData, parseErr)
+              }
+              /* v8 ignore stop */
+            }
           }
         }
-      }
 
-      // Stream ended without explicit done event
-      if (status.value === 'streaming') {
-        status.value = 'done'
-        options.onDone?.(chunks.value)
+        // Flush any remaining bytes from incomplete UTF-8 sequences
+        const remaining = decoder.decode()
+        if (remaining) buffer += remaining
+
+        // Stream ended without explicit done event
+        if (status.value === 'streaming') {
+          status.value = 'done'
+          options.onDone?.(chunks.value)
+        }
+      }
+      finally {
+        // Always release the reader lock to prevent resource leaks
+        reader.releaseLock()
       }
     }
     catch (err: unknown) {

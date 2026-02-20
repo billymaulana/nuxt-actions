@@ -39,7 +39,7 @@ describe('nuxt-actions', async () => {
       expect(result.error.message).toBe('Input validation failed')
       expect(result.error.statusCode).toBe(422)
       expect(result.error.fieldErrors).toBeDefined()
-      expect(result.error.fieldErrors.message).toContain('String must contain at least 1 character(s)')
+      expect(result.error.fieldErrors.message).toContain('Too small: expected string to have >=1 characters')
     })
 
     it('returns validation error on missing input', async () => {
