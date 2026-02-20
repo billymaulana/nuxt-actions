@@ -205,7 +205,7 @@ export default defineNuxtModule<ModuleOptions>({
     name: 'nuxt-actions',
     configKey: 'actions',
     compatibility: {
-      nuxt: '>=3.7.0',
+      nuxt: '^3.7.0 || ^4.0.0',
     },
   },
   defaults: {
