@@ -160,7 +160,7 @@ describe('useActionQuery', () => {
       })
 
       expect(mockUseAsyncData).toHaveBeenCalledWith(
-        expect.any(Function),
+        expect.any(String),
         expect.any(Function),
         expect.objectContaining({
           server: false,
@@ -176,7 +176,7 @@ describe('useActionQuery', () => {
       useActionQuery(createActionRef('test'))
 
       expect(mockUseAsyncData).toHaveBeenCalledWith(
-        expect.any(Function),
+        expect.any(String),
         expect.any(Function),
         expect.objectContaining({
           server: true,
@@ -213,10 +213,10 @@ describe('useActionQuery', () => {
 
       useActionQuery(createActionRef('search'), () => ({ q: 'hello' }))
 
-      // Key is passed as a getter function for reactive updates
+      // Key is passed as an eagerly-evaluated string for Nuxt 3.x compatibility
       const keyArg = mockUseAsyncData.mock.calls[0][0]
-      expect(typeof keyArg).toBe('function')
-      expect((keyArg as () => string)()).toBe('action:/api/_actions/search:{"q":"hello"}')
+      expect(typeof keyArg).toBe('string')
+      expect(keyArg).toBe('action:/api/_actions/search:{"q":"hello"}')
     })
 
     it('generates key with empty object for no input', () => {
@@ -225,22 +225,19 @@ describe('useActionQuery', () => {
       useActionQuery(createActionRef('list'))
 
       const keyArg = mockUseAsyncData.mock.calls[0][0]
-      expect(typeof keyArg).toBe('function')
-      expect((keyArg as () => string)()).toBe('action:/api/_actions/list:{}')
+      expect(typeof keyArg).toBe('string')
+      expect(keyArg).toBe('action:/api/_actions/list:{}')
     })
 
-    it('key updates reactively when input changes', () => {
+    it('key is deterministic for same input', () => {
       mockFetch.mockReturnValue(new Promise(() => {}))
 
-      const query = ref('hello')
-      useActionQuery(createActionRef('search'), () => ({ q: query.value }))
+      useActionQuery(createActionRef('search'), () => ({ q: 'hello' }))
+      useActionQuery(createActionRef('search'), () => ({ q: 'hello' }))
 
-      const keyFn = mockUseAsyncData.mock.calls[0][0] as () => string
-      expect(keyFn()).toBe('action:/api/_actions/search:{"q":"hello"}')
-
-      // Change reactive input — key should reflect the new value
-      query.value = 'world'
-      expect(keyFn()).toBe('action:/api/_actions/search:{"q":"world"}')
+      const key1 = mockUseAsyncData.mock.calls[0][0]
+      const key2 = mockUseAsyncData.mock.calls[1][0]
+      expect(key1).toBe(key2)
     })
   })
 

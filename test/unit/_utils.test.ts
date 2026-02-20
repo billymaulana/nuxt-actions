@@ -550,6 +550,45 @@ describe('createDebouncedFn', () => {
     vi.useRealTimers()
   })
 
+  it('rejects all pending callers when fn throws', async () => {
+    vi.useFakeTimers()
+    const error = new Error('fn failed')
+    const fn = vi.fn().mockRejectedValue(error)
+    const debounced = createDebouncedFn(fn, 100)
+
+    const promise1 = debounced('a')
+    const promise2 = debounced('b')
+
+    vi.advanceTimersByTime(100)
+
+    await expect(promise1).rejects.toThrow('fn failed')
+    await expect(promise2).rejects.toThrow('fn failed')
+
+    vi.useRealTimers()
+  })
+
+  it('recovers after fn error — next call works normally', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    const fn = vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 1) throw new Error('first call fails')
+      return 'success'
+    })
+    const debounced = createDebouncedFn(fn, 100)
+
+    const promise1 = debounced('first')
+    vi.advanceTimersByTime(100)
+    await expect(promise1).rejects.toThrow('first call fails')
+
+    const promise2 = debounced('second')
+    vi.advanceTimersByTime(100)
+    const result = await promise2
+    expect(result).toBe('success')
+
+    vi.useRealTimers()
+  })
+
   it('cancel rejects with CancelledError that has correct name', async () => {
     vi.useFakeTimers()
     const fn = vi.fn().mockResolvedValue('result')
@@ -735,6 +774,59 @@ describe('createThrottledFn', () => {
     await expect(promise).rejects.toThrow(CancelledError)
     // Only the first immediate call should have fired
     expect(fn).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+  })
+
+  it('rejects pending callers when fn throws in trailing timer', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    const fn = vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 2) throw new Error('trailing fn failed')
+      return 'ok'
+    })
+    const throttled = createThrottledFn(fn, 100)
+
+    // First call — immediate, succeeds
+    await throttled('first')
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    // Second call within window — deferred to trailing timer
+    const promise = throttled('second')
+
+    vi.advanceTimersByTime(100)
+
+    await expect(promise).rejects.toThrow('trailing fn failed')
+
+    vi.useRealTimers()
+  })
+
+  it('rejects pending callers from cleared timer when immediate fn throws', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    const fn = vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 2) throw new Error('immediate fn failed')
+      return 'ok'
+    })
+    const throttled = createThrottledFn(fn, 100)
+
+    // First call — immediate, succeeds
+    await throttled('first')
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    // Second call within window — sets trailing timer
+    const pendingPromise = throttled('second')
+
+    // Move time past window
+    vi.setSystemTime(Date.now() + 200)
+
+    // Third call — elapsed >= ms, executes immediately, but fn throws
+    const immediatePromise = throttled('third')
+
+    await expect(immediatePromise).rejects.toThrow('immediate fn failed')
+    await expect(pendingPromise).rejects.toThrow('immediate fn failed')
 
     vi.useRealTimers()
   })

@@ -157,10 +157,15 @@ export function createDebouncedFn<T extends (...args: any[]) => any>(
       pendingResolvers.push({ resolve, reject })
       timer = setTimeout(async () => {
         timer = null
-        const result = await fn(...args)
-        // Resolve all pending callers with the same result
-        const resolvers = pendingResolvers.splice(0)
-        for (const r of resolvers) r.resolve(result)
+        try {
+          const result = await fn(...args)
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.resolve(result)
+        }
+        catch (err) {
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.reject(err)
+        }
       }, ms)
     })
   }
@@ -208,9 +213,10 @@ export function createThrottledFn<T extends (...args: any[]) => any>(
       // Resolve any pending callers from the cleared trailing timer
       if (pendingResolvers.length > 0) {
         const resolvers = pendingResolvers.splice(0)
-        resultPromise.then((result) => {
-          for (const r of resolvers) r.resolve(result)
-        })
+        resultPromise.then(
+          (result) => { for (const r of resolvers) r.resolve(result) },
+          (err) => { for (const r of resolvers) r.reject(err) },
+        )
       }
       return resultPromise
     }
@@ -224,10 +230,15 @@ export function createThrottledFn<T extends (...args: any[]) => any>(
       timer = setTimeout(async () => {
         lastCallTime = Date.now()
         timer = null
-        const result = await fn(...(pendingArgs as Parameters<T>))
-        // Resolve all pending callers with the same result
-        const resolvers = pendingResolvers.splice(0)
-        for (const r of resolvers) r.resolve(result)
+        try {
+          const result = await fn(...(pendingArgs as Parameters<T>))
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.resolve(result)
+        }
+        catch (err) {
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.reject(err)
+        }
         pendingArgs = null
       }, ms - elapsed)
     })
