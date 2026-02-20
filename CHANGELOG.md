@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.2 (2026-02-20)
+
+### Fixes
+
+- Replace `AbortSignal.any()` with setTimeout+flag for Safari <17.4 / Node <20.3 compatibility
+- Add structural `isActionError` detection for plain error objects (code+message+statusCode)
+- Correct false CSRF protection claim in security docs
+- Disable Dependabot auto-PRs (keep security alerts only)
+
 ## v1.0.1 (2026-02-20)
 
 ### Fixes
