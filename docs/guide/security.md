@@ -4,20 +4,9 @@ Best practices for securing your server actions in production.
 
 ## CSRF Protection
 
-Server actions are executed via standard HTTP requests (`POST`, `GET`, etc.) to `/api/_actions/*` endpoints. Nuxt includes built-in CSRF protection for server routes, but you should verify your configuration:
+Server actions are executed via standard HTTP requests (`POST`, `GET`, etc.) to `/api/_actions/*` endpoints. Nuxt does **not** include built-in CSRF protection — you must implement it yourself or use a module like [`nuxt-security`](https://nuxt-security.vercel.app/).
 
-```ts
-// nuxt.config.ts
-export default defineNuxtConfig({
-  routeRules: {
-    '/api/_actions/**': {
-      // Nuxt's default security headers apply
-    },
-  },
-})
-```
-
-For additional CSRF protection, use a middleware that validates a custom header:
+To add CSRF protection, use an action middleware that validates the request origin:
 
 ```ts
 // server/actions/_middleware.ts — not auto-scanned (underscore prefix)

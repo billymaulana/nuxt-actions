@@ -247,11 +247,26 @@ async function parseInput(event: H3Event): Promise<unknown> {
 }
 
 export function isActionError(error: unknown): error is ActionError {
-  return (
-    error !== null
-    && typeof error === 'object'
-    && Object.prototype.hasOwnProperty.call(error, '__isActionError')
+  if (error === null || typeof error !== 'object') return false
+
+  // Primary: explicit marker from createActionError()
+  if (
+    Object.prototype.hasOwnProperty.call(error, '__isActionError')
     && (error as Record<string, unknown>).__isActionError === true
+  ) {
+    return true
+  }
+
+  // Fallback: structural detection — objects with `code` (string), `message` (string),
+  // and `statusCode` (number) are treated as intentional action errors. This allows
+  // developers to throw plain error objects without requiring createActionError().
+  // Requires all three fields to minimize false positives from accidental objects.
+  const candidate = error as Record<string, unknown>
+  return (
+    typeof candidate.code === 'string'
+    && typeof candidate.message === 'string'
+    && typeof candidate.statusCode === 'number'
+    && !('stack' in candidate) // Exclude regular Error instances (they have code/message too)
   )
 }
 

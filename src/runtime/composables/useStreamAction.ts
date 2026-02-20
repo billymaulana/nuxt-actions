@@ -99,6 +99,17 @@ export function useStreamAction(
     status.value = 'streaming'
     error.value = null
 
+    // Timeout via simple setTimeout + flag instead of AbortSignal.any()
+    // for broader runtime support (Safari <17.4, Node <20.3 lack AbortSignal.any)
+    let timedOut = false
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    if (options.timeout) {
+      timeoutId = setTimeout(() => {
+        timedOut = true
+        abortController?.abort()
+      }, options.timeout)
+    }
+
     try {
       // Build URL with query params for GET, body for POST
       let url = actionPath
@@ -138,15 +149,10 @@ export function useStreamAction(
       }
       /* v8 ignore stop */
 
-      // Combine user abort with optional timeout
-      const signal = options.timeout
-        ? AbortSignal.any([abortController.signal, AbortSignal.timeout(options.timeout)])
-        : abortController.signal
-
       const fetchInit: RequestInit = {
         method,
         headers,
-        signal,
+        signal: abortController.signal,
       }
       if (body !== undefined) {
         fetchInit.body = body
@@ -240,6 +246,19 @@ export function useStreamAction(
       if (thisExecutionId !== executionId) return
 
       if (err instanceof DOMException && err.name === 'AbortError') {
+        // Check if abort was triggered by timeout
+        if (timedOut) {
+          const timeoutError: ActionError = {
+            code: 'TIMEOUT_ERROR',
+            message: `Stream connection timed out after ${options.timeout}ms`,
+            statusCode: 408,
+          }
+          error.value = timeoutError
+          status.value = 'error'
+          options.onError?.(timeoutError)
+          return
+        }
+
         // Intentional abort (stop() or new execute())
         // Guard: only set 'done' if still streaming — a new execute() may have started
         /* v8 ignore start -- race-condition guard: stop() sets 'done' before abort fires */
@@ -250,7 +269,9 @@ export function useStreamAction(
         return
       }
 
-      // TimeoutError from AbortSignal.timeout()
+      // Legacy: direct TimeoutError — only fires if a runtime throws TimeoutError
+      // independently (e.g. from a custom AbortSignal.timeout() used elsewhere).
+      // The primary timeout mechanism above uses setTimeout + AbortError + timedOut flag.
       if (err instanceof DOMException && err.name === 'TimeoutError') {
         const timeoutError: ActionError = {
           code: 'TIMEOUT_ERROR',
@@ -271,6 +292,9 @@ export function useStreamAction(
       error.value = actionError
       status.value = 'error'
       options.onError?.(actionError)
+    }
+    finally {
+      clearTimeout(timeoutId)
     }
   }
 
