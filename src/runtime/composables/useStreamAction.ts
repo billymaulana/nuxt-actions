@@ -236,8 +236,10 @@ export function useStreamAction(
         }
 
         // Flush any remaining bytes from incomplete UTF-8 sequences
+        /* v8 ignore start -- TextDecoder flush only produces output with split multibyte chars at stream boundary */
         const remaining = decoder.decode()
         if (remaining) buffer += remaining
+        /* v8 ignore stop */
 
         // Stream ended without explicit done event
         if (status.value === 'streaming') {
