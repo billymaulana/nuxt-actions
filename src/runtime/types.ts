@@ -268,6 +268,8 @@ export interface UseActionQueryReturn<TOutput> {
 // ── useStreamAction Options ───────────────────────────────────────
 
 export interface UseStreamActionOptions<TChunk = unknown> {
+  /** HTTP method override for string path usage. Default: 'POST' */
+  method?: HttpMethod
   /** Static headers or a function returning headers (e.g. for auth tokens) */
   headers?: Record<string, string> | (() => Record<string, string>)
   /** Connection timeout in milliseconds. Aborts the stream if the initial connection is not established within this time. */

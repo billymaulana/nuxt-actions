@@ -1106,6 +1106,60 @@ describe('middleware deep merge context', () => {
     })
   })
 
+  it('guards against __proto__ pollution in middleware context', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const mw = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      // Attempt prototype pollution via __proto__ key
+      return next({ ctx: { __proto__: { isAdmin: true } } })
+    }
+
+    const handler = defineAction({
+      middleware: [mw as never],
+      handler: async ({ ctx }) => ctx,
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent()) as Record<string, unknown>
+    // The __proto__ key should be silently dropped, not merged
+    expect(result).toEqual({ success: true, data: {} })
+    // Object.prototype should NOT be polluted
+    expect(({} as Record<string, unknown>).isAdmin).toBeUndefined()
+  })
+
+  it('guards against constructor pollution in middleware context', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const mw = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      return next({ ctx: { constructor: { polluted: true } } })
+    }
+
+    const handler = defineAction({
+      middleware: [mw as never],
+      handler: async ({ ctx }) => ctx,
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent()) as Record<string, unknown>
+    // The constructor key should be silently dropped
+    expect(result).toEqual({ success: true, data: {} })
+  })
+
+  it('guards against prototype pollution in middleware context', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const mw = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      return next({ ctx: { prototype: { polluted: true } } })
+    }
+
+    const handler = defineAction({
+      middleware: [mw as never],
+      handler: async ({ ctx }) => ctx,
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent()) as Record<string, unknown>
+    // The prototype key should be silently dropped
+    expect(result).toEqual({ success: true, data: {} })
+  })
+
   it('overwrites arrays in context instead of merging them', async () => {
     vi.mocked(readBody).mockResolvedValue({})
 

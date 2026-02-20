@@ -142,9 +142,15 @@ export function defineStreamAction<
             }
           }
           else {
+            // Never leak internal error details to clients in production
+            /* v8 ignore start -- import.meta.dev is a compile-time constant set by Nuxt */
+            if (import.meta.dev && err instanceof Error) {
+              console.error('[nuxt-actions] Stream handler error:', err)
+            }
+            /* v8 ignore stop */
             errorPayload = {
               code: 'STREAM_ERROR',
-              message: err instanceof Error ? err.message : 'Stream handler error',
+              message: 'Stream handler error',
               statusCode: 500,
             }
           }

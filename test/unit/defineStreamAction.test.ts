@@ -472,6 +472,28 @@ describe('defineStreamAction', () => {
       expect(parsed.__actions_error.statusCode).toBe(429)
     })
 
+    it('sanitizes error messages from handler (does NOT leak raw err.message)', async () => {
+      mockGetQuery.mockReturnValue({})
+
+      const handler = vi.fn(async () => {
+        throw new Error('postgres://admin:s3cret@db.internal:5432/production')
+      })
+
+      const action = defineStreamAction({ handler })
+      const eventHandler = action as unknown as (event: H3Event) => Promise<unknown>
+      await eventHandler(createMockEvent('GET'))
+
+      await new Promise(r => setTimeout(r, 10))
+
+      const pushCall = mockEventStream.push.mock.calls[0][0] as string
+      const parsed = JSON.parse(pushCall)
+      expect(parsed.__actions_error.code).toBe('STREAM_ERROR')
+      // Must NOT contain the raw internal error details
+      expect(parsed.__actions_error.message).toBe('Stream handler error')
+      expect(parsed.__actions_error.message).not.toContain('postgres')
+      expect(parsed.__actions_error.statusCode).toBe(500)
+    })
+
     it('handles non-Error thrown in handler', async () => {
       mockGetQuery.mockReturnValue({})
 

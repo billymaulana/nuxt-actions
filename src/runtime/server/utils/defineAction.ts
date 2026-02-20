@@ -297,6 +297,9 @@ function deepMerge(
 ): Record<string, unknown> {
   const result = { ...target }
   for (const key of Object.keys(source)) {
+    // Guard against prototype pollution: never allow these keys to be merged
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
+
     const targetVal = target[key]
     const sourceVal = source[key]
     if (

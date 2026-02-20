@@ -155,7 +155,7 @@ export function useAction(
       const actionError: ActionError = {
         code: 'FETCH_ERROR',
         message: err instanceof Error ? err.message : 'Failed to execute action',
-        statusCode: 500,
+        statusCode: 0,
       }
 
       error.value = actionError

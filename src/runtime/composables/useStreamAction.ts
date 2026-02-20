@@ -2,6 +2,7 @@ import { shallowRef, ref, readonly, triggerRef, onScopeDispose } from 'vue'
 import { useNuxtApp, useRequestURL } from '#app'
 import type {
   ActionError,
+  StreamStatus,
   TypedActionReference,
   InferActionInput,
   InferActionOutput,
@@ -9,8 +10,6 @@ import type {
   UseStreamActionReturn,
 } from '../types'
 import { resolveHeaders } from './_utils'
-
-type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
 /**
  * Composable for consuming streaming server actions via SSE.
@@ -49,7 +48,7 @@ export function useStreamAction(
 
   if (typeof pathOrAction === 'string') {
     actionPath = pathOrAction
-    method = 'POST'
+    method = options.method ?? 'POST'
   }
   else {
     actionPath = `/api/_actions/${pathOrAction.__actionPath}`

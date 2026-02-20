@@ -286,6 +286,25 @@ describe('useStreamAction', () => {
       expect(calledUrl).not.toContain('?')
     })
 
+    it('allows method override for string path', async () => {
+      const stream = createSSEStream(['data: {"__actions_done":true}'])
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: stream,
+      })
+
+      const { execute } = useStreamAction('/api/stream', { method: 'GET' })
+      await execute({ q: 'test' })
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string
+      const init = mockFetch.mock.calls[0][1] as RequestInit
+      expect(init.method).toBe('GET')
+      expect(calledUrl).toContain('q=test')
+      expect(init.body).toBeUndefined()
+    })
+
     it('handles POST with null input', async () => {
       const stream = createSSEStream(['data: {"__actions_done":true}'])
       mockFetch.mockResolvedValue({
