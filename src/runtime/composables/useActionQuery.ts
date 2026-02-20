@@ -68,16 +68,14 @@ export function useActionQuery(
     method = pathOrAction.__actionMethod
   }
 
-  // Generate a unique key for caching/dedup — passed as getter for reactive key updates
-  const keyFn = () => {
-    const inputVal = toValue(input) ?? {}
-    return `action:${path}:${stableStringify(inputVal)}`
-  }
+  // Generate a unique key for caching/dedup — evaluated eagerly as a string
+  // for Nuxt 3.x compatibility (getter keys require Nuxt 3.14+)
+  const key = `action:${path}:${stableStringify(toValue(input) ?? {})}`
 
   const isBodyMethod = method === 'POST' || method === 'PUT' || method === 'PATCH'
 
   const asyncData = useAsyncData(
-    keyFn,
+    key,
     () => {
       const inputVal = toValue(input) ?? {}
       const fetchOpts: Record<string, unknown> = { method }

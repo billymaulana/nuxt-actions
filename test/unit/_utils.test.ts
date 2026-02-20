@@ -1,4 +1,4 @@
-import { resolveRetryCount, resolveRetryDelay, resolveRetryStatusCodes, resolveHeaders, stableStringify, buildFetchOptions, createDebouncedFn, createThrottledFn } from '../../src/runtime/composables/_utils'
+import { resolveRetryCount, resolveRetryDelay, resolveRetryStatusCodes, resolveHeaders, stableStringify, buildFetchOptions, createDebouncedFn, createThrottledFn, CancelledError } from '../../src/runtime/composables/_utils'
 import { describe, it, expect, vi } from 'vitest'
 
 describe('resolveRetryCount', () => {
@@ -507,15 +507,18 @@ describe('createDebouncedFn', () => {
     vi.useRealTimers()
   })
 
-  it('has a cancel method that clears pending timer', () => {
+  it('has a cancel method that clears pending timer', async () => {
     vi.useFakeTimers()
     const fn = vi.fn().mockResolvedValue('result')
     const debounced = createDebouncedFn(fn, 100)
 
-    debounced('arg1')
+    const promise = debounced('arg1')
     expect(fn).not.toHaveBeenCalled()
 
     debounced.cancel()
+
+    // Pending promise should be rejected
+    await expect(promise).rejects.toThrow(CancelledError)
 
     vi.advanceTimersByTime(200)
     expect(fn).not.toHaveBeenCalled()
@@ -528,6 +531,82 @@ describe('createDebouncedFn', () => {
     const debounced = createDebouncedFn(fn, 100)
 
     expect(() => debounced.cancel()).not.toThrow()
+  })
+
+  it('cancel rejects pending promises with CancelledError', async () => {
+    vi.useFakeTimers()
+    const fn = vi.fn().mockResolvedValue('result')
+    const debounced = createDebouncedFn(fn, 100)
+
+    const promise1 = debounced('a')
+    const promise2 = debounced('b')
+
+    debounced.cancel()
+
+    await expect(promise1).rejects.toThrow(CancelledError)
+    await expect(promise2).rejects.toThrow(CancelledError)
+    expect(fn).not.toHaveBeenCalled()
+
+    vi.useRealTimers()
+  })
+
+  it('rejects all pending callers when fn throws', async () => {
+    vi.useFakeTimers()
+    const error = new Error('fn failed')
+    const fn = vi.fn().mockRejectedValue(error)
+    const debounced = createDebouncedFn(fn, 100)
+
+    const promise1 = debounced('a')
+    const promise2 = debounced('b')
+
+    vi.advanceTimersByTime(100)
+
+    await expect(promise1).rejects.toThrow('fn failed')
+    await expect(promise2).rejects.toThrow('fn failed')
+
+    vi.useRealTimers()
+  })
+
+  it('recovers after fn error — next call works normally', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    const fn = vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 1) throw new Error('first call fails')
+      return 'success'
+    })
+    const debounced = createDebouncedFn(fn, 100)
+
+    const promise1 = debounced('first')
+    vi.advanceTimersByTime(100)
+    await expect(promise1).rejects.toThrow('first call fails')
+
+    const promise2 = debounced('second')
+    vi.advanceTimersByTime(100)
+    const result = await promise2
+    expect(result).toBe('success')
+
+    vi.useRealTimers()
+  })
+
+  it('cancel rejects with CancelledError that has correct name', async () => {
+    vi.useFakeTimers()
+    const fn = vi.fn().mockResolvedValue('result')
+    const debounced = createDebouncedFn(fn, 100)
+
+    const promise = debounced('a')
+    debounced.cancel()
+
+    try {
+      await promise
+    }
+    catch (err) {
+      expect(err).toBeInstanceOf(CancelledError)
+      expect((err as CancelledError).name).toBe('CancelledError')
+      expect((err as CancelledError).message).toBe('Cancelled')
+    }
+
+    vi.useRealTimers()
   })
 })
 
@@ -657,9 +736,12 @@ describe('createThrottledFn', () => {
     expect(fn).toHaveBeenCalledTimes(1)
 
     // Second call within window — deferred
-    throttled('second')
+    const promise = throttled('second')
 
     throttled.cancel()
+
+    // Pending promise should be rejected
+    await expect(promise).rejects.toThrow(CancelledError)
 
     vi.advanceTimersByTime(200)
     // Only the immediate first call, trailing was cancelled
@@ -673,6 +755,80 @@ describe('createThrottledFn', () => {
     const throttled = createThrottledFn(fn, 100)
 
     expect(() => throttled.cancel()).not.toThrow()
+  })
+
+  it('cancel rejects pending promises with CancelledError', async () => {
+    vi.useFakeTimers()
+    const fn = vi.fn().mockResolvedValue('result')
+    const throttled = createThrottledFn(fn, 100)
+
+    // First call — immediate
+    await throttled('first')
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    // Second call — deferred (within throttle window)
+    const promise = throttled('second')
+
+    throttled.cancel()
+
+    await expect(promise).rejects.toThrow(CancelledError)
+    // Only the first immediate call should have fired
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+  })
+
+  it('rejects pending callers when fn throws in trailing timer', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    const fn = vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 2) throw new Error('trailing fn failed')
+      return 'ok'
+    })
+    const throttled = createThrottledFn(fn, 100)
+
+    // First call — immediate, succeeds
+    await throttled('first')
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    // Second call within window — deferred to trailing timer
+    const promise = throttled('second')
+
+    vi.advanceTimersByTime(100)
+
+    await expect(promise).rejects.toThrow('trailing fn failed')
+
+    vi.useRealTimers()
+  })
+
+  it('rejects pending callers from cleared timer when immediate fn throws', async () => {
+    vi.useFakeTimers()
+    let callCount = 0
+    const fn = vi.fn().mockImplementation(async () => {
+      callCount++
+      if (callCount === 2) throw new Error('immediate fn failed')
+      return 'ok'
+    })
+    const throttled = createThrottledFn(fn, 100)
+
+    // First call — immediate, succeeds
+    await throttled('first')
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    // Second call within window — sets trailing timer
+    const pendingPromise = throttled('second')
+
+    // Move time past window
+    vi.setSystemTime(Date.now() + 200)
+
+    // Third call — elapsed >= ms, executes immediately, but fn throws
+    const immediatePromise = throttled('third')
+
+    await expect(immediatePromise).rejects.toThrow('immediate fn failed')
+    await expect(pendingPromise).rejects.toThrow('immediate fn failed')
+
+    vi.useRealTimers()
   })
 
   it('clears pending trailing timer when new call arrives after window', async () => {

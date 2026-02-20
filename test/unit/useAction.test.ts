@@ -153,7 +153,7 @@ describe('useAction', () => {
       expect(error.value).toEqual({
         code: 'FETCH_ERROR',
         message: 'Network error',
-        statusCode: 500,
+        statusCode: 0,
       })
       expect(status.value).toBe('error')
     })
@@ -167,7 +167,7 @@ describe('useAction', () => {
       expect(error.value).toEqual({
         code: 'FETCH_ERROR',
         message: 'Failed to execute action',
-        statusCode: 500,
+        statusCode: 0,
       })
     })
   })
@@ -277,7 +277,7 @@ describe('useAction', () => {
       await expect(executeAsync({})).rejects.toEqual({
         code: 'FETCH_ERROR',
         message: 'Network',
-        statusCode: 500,
+        statusCode: 0,
       })
     })
   })

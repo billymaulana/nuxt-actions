@@ -57,6 +57,52 @@
       </div>
     </section>
 
+    <!-- Chain Break Demo -->
+    <section>
+      <h3 style="margin-bottom: 8px;">
+        Chain Break Behavior
+      </h3>
+      <p style="color: #666; font-size: 13px; margin-bottom: 8px;">
+        When middleware does not call <code>next()</code>, the chain breaks — remaining middleware is skipped, but the handler still runs with whatever context was accumulated so far.
+      </p>
+      <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+        <button
+          :disabled="chainComplete.isExecuting.value"
+          @click="chainComplete.execute({ label: 'complete' })"
+        >
+          Complete Chain (all next())
+        </button>
+        <button
+          :disabled="chainSkip.isExecuting.value"
+          @click="chainSkip.execute({ label: 'skip' })"
+        >
+          Break Chain (mw2 skips next())
+        </button>
+      </div>
+      <div
+        v-if="chainComplete.hasSucceeded.value"
+        class="success"
+      >
+        <strong>Complete chain:</strong>
+        <pre>{{ JSON.stringify(chainComplete.data.value, null, 2) }}</pre>
+      </div>
+      <div
+        v-if="chainSkip.hasSucceeded.value"
+        class="success"
+      >
+        <strong>Chain break (mw2 skipped next()):</strong>
+        <pre>{{ JSON.stringify(chainSkip.data.value, null, 2) }}</pre>
+      </div>
+      <pre>// mw2 does NOT call next()
+const mw2Skip = defineMiddleware(async () => {
+  // chain breaks here — mw3 never runs
+  // handler still executes with ctx from mw1 only
+})
+
+middleware: [mw1, mw2Skip, mw3]
+// Result: mw1 ✓, mw2 skipped, mw3 ✗, handler ✓</pre>
+    </section>
+
     <section>
       <h3 style="margin-bottom: 8px;">
         How it works
@@ -83,7 +129,7 @@ export default defineAction({
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { login } from '#actions'
+import { login, middlewareChain, middlewareChainSkip } from '#actions'
 
 const email = ref('admin@example.com')
 const password = ref('password123')
@@ -93,4 +139,8 @@ const loginAction = useAction(login)
 async function handleLogin() {
   await loginAction.execute({ email: email.value, password: password.value })
 }
+
+// Chain break demo
+const chainComplete = useAction(middlewareChain)
+const chainSkip = useAction(middlewareChainSkip)
 </script>

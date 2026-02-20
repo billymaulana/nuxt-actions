@@ -297,6 +297,9 @@ function deepMerge(
 ): Record<string, unknown> {
   const result = { ...target }
   for (const key of Object.keys(source)) {
+    // Guard against prototype pollution: never allow these keys to be merged
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
+
     const targetVal = target[key]
     const sourceVal = source[key]
     if (
@@ -341,13 +344,11 @@ export async function runMiddleware(
       },
     })
 
-    // Warn if middleware forgot to call next() — almost always a bug
+    // If middleware did not call next(), stop the chain.
+    // Middleware that wants to block the request should throw an ActionError.
+    // Not calling next() means "skip remaining middleware" — the handler still runs.
     if (!nextCalled) {
-      console.warn(
-        '[nuxt-actions] Middleware did not call next(). '
-        + 'This may be intentional (early return) or a bug. '
-        + 'Context from this middleware will not be propagated.',
-      )
+      break
     }
   }
 

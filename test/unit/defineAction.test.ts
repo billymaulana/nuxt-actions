@@ -1106,6 +1106,60 @@ describe('middleware deep merge context', () => {
     })
   })
 
+  it('guards against __proto__ pollution in middleware context', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const mw = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      // Attempt prototype pollution via __proto__ key
+      return next({ ctx: { __proto__: { isAdmin: true } } })
+    }
+
+    const handler = defineAction({
+      middleware: [mw as never],
+      handler: async ({ ctx }) => ctx,
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent()) as Record<string, unknown>
+    // The __proto__ key should be silently dropped, not merged
+    expect(result).toEqual({ success: true, data: {} })
+    // Object.prototype should NOT be polluted
+    expect(({} as Record<string, unknown>).isAdmin).toBeUndefined()
+  })
+
+  it('guards against constructor pollution in middleware context', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const mw = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      return next({ ctx: { constructor: { polluted: true } } })
+    }
+
+    const handler = defineAction({
+      middleware: [mw as never],
+      handler: async ({ ctx }) => ctx,
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent()) as Record<string, unknown>
+    // The constructor key should be silently dropped
+    expect(result).toEqual({ success: true, data: {} })
+  })
+
+  it('guards against prototype pollution in middleware context', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const mw = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      return next({ ctx: { prototype: { polluted: true } } })
+    }
+
+    const handler = defineAction({
+      middleware: [mw as never],
+      handler: async ({ ctx }) => ctx,
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent()) as Record<string, unknown>
+    // The prototype key should be silently dropped
+    expect(result).toEqual({ success: true, data: {} })
+  })
+
   it('overwrites arrays in context instead of merging them', async () => {
     vi.mocked(readBody).mockResolvedValue({})
 
@@ -1134,7 +1188,7 @@ describe('middleware next() warning', () => {
     vi.clearAllMocks()
   })
 
-  it('logs a console.warn when middleware does not call next()', async () => {
+  it('breaks the chain silently when middleware does not call next()', async () => {
     vi.mocked(readBody).mockResolvedValue({})
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -1147,12 +1201,48 @@ describe('middleware next() warning', () => {
       handler: async () => ({ ok: true }),
     })
 
-    await (handler as (event: unknown) => Promise<unknown>)(createMockEvent())
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent())
 
-    expect(warnSpy).toHaveBeenCalledOnce()
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('did not call next()'))
+    // Should NOT warn — just break the chain
+    expect(warnSpy).not.toHaveBeenCalled()
+    // Handler still runs
+    expect(result).toEqual({ success: true, data: { ok: true } })
 
     warnSpy.mockRestore()
+  })
+
+  it('stops the middleware chain when next() is not called', async () => {
+    vi.mocked(readBody).mockResolvedValue({})
+
+    const callOrder: string[] = []
+
+    const mw1 = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      callOrder.push('mw1')
+      return next({ ctx: { from1: true } })
+    }
+    const mw2 = async (_opts: { next: (opts?: unknown) => Promise<unknown> }) => {
+      callOrder.push('mw2')
+      // Deliberately does not call next()
+    }
+    const mw3 = async ({ next }: { next: (opts?: { ctx: Record<string, unknown> }) => Promise<unknown> }) => {
+      callOrder.push('mw3')
+      return next({ ctx: { from3: true } })
+    }
+
+    const handler = defineAction({
+      middleware: [mw1 as never, mw2 as never, mw3 as never],
+      handler: async ({ ctx }) => ({ ctx }),
+    })
+
+    const result = await (handler as (event: unknown) => Promise<unknown>)(createMockEvent()) as Record<string, unknown>
+
+    // mw1 and mw2 ran, but mw3 should NOT have run because mw2 didn't call next()
+    expect(callOrder).toEqual(['mw1', 'mw2'])
+    // Handler still runs with context from mw1 only
+    expect(result).toEqual({
+      success: true,
+      data: { ctx: { from1: true } },
+    })
   })
 
   it('does not log the next() warning when middleware throws', async () => {

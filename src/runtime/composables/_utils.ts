@@ -126,6 +126,13 @@ export function buildFetchOptions(opts: FetchOptionInputs): Record<string, unkno
 
 // ── Debounce / Throttle helpers ─────────────────────────────────
 
+export class CancelledError extends Error {
+  constructor() {
+    super('Cancelled')
+    this.name = 'CancelledError'
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CancelableFunction<T extends (...args: any[]) => any>
   = ((...args: Parameters<T>) => Promise<ReturnType<T>>) & { cancel: () => void }
@@ -141,19 +148,24 @@ export function createDebouncedFn<T extends (...args: any[]) => any>(
   ms: number,
 ): CancelableFunction<T> {
   let timer: ReturnType<typeof setTimeout> | null = null
-  const pendingResolvers: Array<(value: ReturnType<T>) => void> = []
+  const pendingResolvers: Array<{ resolve: (value: ReturnType<T>) => void, reject: (reason: unknown) => void }> = []
 
   const wrapper = (...args: Parameters<T>): Promise<ReturnType<T>> => {
     if (timer) clearTimeout(timer)
 
-    return new Promise((resolve) => {
-      pendingResolvers.push(resolve)
+    return new Promise((resolve, reject) => {
+      pendingResolvers.push({ resolve, reject })
       timer = setTimeout(async () => {
         timer = null
-        const result = await fn(...args)
-        // Resolve all pending callers with the same result
-        const resolvers = pendingResolvers.splice(0)
-        for (const r of resolvers) r(result)
+        try {
+          const result = await fn(...args)
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.resolve(result)
+        }
+        catch (err) {
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.reject(err)
+        }
       }, ms)
     })
   }
@@ -163,6 +175,9 @@ export function createDebouncedFn<T extends (...args: any[]) => any>(
       clearTimeout(timer)
       timer = null
     }
+    // Reject all pending promises so callers are not left dangling
+    const resolvers = pendingResolvers.splice(0)
+    for (const r of resolvers) r.reject(new CancelledError())
   }
 
   return wrapper
@@ -181,7 +196,7 @@ export function createThrottledFn<T extends (...args: any[]) => any>(
   let lastCallTime = 0
   let timer: ReturnType<typeof setTimeout> | null = null
   let pendingArgs: Parameters<T> | null = null
-  const pendingResolvers: Array<(value: ReturnType<T>) => void> = []
+  const pendingResolvers: Array<{ resolve: (value: ReturnType<T>) => void, reject: (reason: unknown) => void }> = []
 
   const wrapper = (...args: Parameters<T>): Promise<ReturnType<T>> => {
     const now = Date.now()
@@ -194,22 +209,36 @@ export function createThrottledFn<T extends (...args: any[]) => any>(
         clearTimeout(timer)
         timer = null
       }
-      return Promise.resolve(fn(...args))
+      const resultPromise = Promise.resolve(fn(...args))
+      // Resolve any pending callers from the cleared trailing timer
+      if (pendingResolvers.length > 0) {
+        const resolvers = pendingResolvers.splice(0)
+        resultPromise.then(
+          (result) => { for (const r of resolvers) r.resolve(result) },
+          (err) => { for (const r of resolvers) r.reject(err) },
+        )
+      }
+      return resultPromise
     }
 
     // Within throttle window — schedule trailing call
     pendingArgs = args
     if (timer) clearTimeout(timer)
 
-    return new Promise((resolve) => {
-      pendingResolvers.push(resolve)
+    return new Promise((resolve, reject) => {
+      pendingResolvers.push({ resolve, reject })
       timer = setTimeout(async () => {
         lastCallTime = Date.now()
         timer = null
-        const result = await fn(...(pendingArgs as Parameters<T>))
-        // Resolve all pending callers with the same result
-        const resolvers = pendingResolvers.splice(0)
-        for (const r of resolvers) r(result)
+        try {
+          const result = await fn(...(pendingArgs as Parameters<T>))
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.resolve(result)
+        }
+        catch (err) {
+          const resolvers = pendingResolvers.splice(0)
+          for (const r of resolvers) r.reject(err)
+        }
         pendingArgs = null
       }, ms - elapsed)
     })
@@ -220,6 +249,9 @@ export function createThrottledFn<T extends (...args: any[]) => any>(
       clearTimeout(timer)
       timer = null
     }
+    // Reject all pending promises so callers are not left dangling
+    const resolvers = pendingResolvers.splice(0)
+    for (const r of resolvers) r.reject(new CancelledError())
   }
 
   return wrapper

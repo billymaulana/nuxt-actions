@@ -19,6 +19,9 @@
       <NuxtLink to="/middleware">
         Middleware
       </NuxtLink>
+      <NuxtLink to="/advanced">
+        Advanced
+      </NuxtLink>
     </nav>
     <main>
       <NuxtPage />

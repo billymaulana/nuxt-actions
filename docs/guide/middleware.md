@@ -351,15 +351,15 @@ export default adminClient
 
 ### Always call next()
 
-Every middleware **must** call `next()` exactly once to continue the chain. If you forget to call `next()`, the action will hang. The only exception is when you throw an error, which halts the chain intentionally.
+Every middleware **must** call `next()` exactly once to continue the chain. If a middleware does not call `next()`, the remaining middleware in the chain is **skipped** and the handler runs with whatever context was accumulated so far. To block the request entirely, throw an error instead.
 
 ```ts
-// Correct: calls next()
+// Correct: calls next() to continue the chain
 const good = defineMiddleware(async ({ next }) => {
   return next()
 })
 
-// Correct: throws instead of calling next()
+// Correct: throws to halt the chain AND prevent the handler from running
 const alsoGood = defineMiddleware(async ({ next }) => {
   throw createActionError({
     code: 'BLOCKED',
@@ -368,10 +368,11 @@ const alsoGood = defineMiddleware(async ({ next }) => {
   })
 })
 
-// Wrong: never calls next() and never throws
-const bad = defineMiddleware(async ({ next }) => {
+// Caution: not calling next() skips remaining middleware
+// The handler still runs, but downstream middleware won't execute
+const skipsChain = defineMiddleware(async ({ next }) => {
   console.log('hello')
-  // forgot to return next() -- the action will never complete
+  // remaining middleware is skipped, handler runs without their context
 })
 ```
 
