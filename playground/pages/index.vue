@@ -53,5 +53,10 @@ const pages = [
     title: 'Middleware & Auth',
     description: 'Authentication flow with chained middleware, validation, and error handling.',
   },
+  {
+    path: '/advanced',
+    title: 'Advanced Features',
+    description: 'Retry, timeout, custom headers, dedupe, throttle, output validation, and executeAsync.',
+  },
 ]
 </script>
