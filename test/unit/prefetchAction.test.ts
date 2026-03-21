@@ -28,8 +28,8 @@ describe('prefetchAction', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Clear payload and static data
-    for (const key of Object.keys(payloadData)) delete payloadData[key]
-    for (const key of Object.keys(staticData)) delete staticData[key]
+    Object.keys(payloadData).forEach(key => Reflect.deleteProperty(payloadData, key))
+    Object.keys(staticData).forEach(key => Reflect.deleteProperty(staticData, key))
   })
 
   describe('fetches and stores result in payload.data', () => {

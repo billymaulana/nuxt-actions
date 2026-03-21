@@ -46,7 +46,7 @@ describe('useStreamActionQuery', () => {
     capturedStreamOptions = {}
     mockStreamStatus.value = 'idle'
     // Clear payload data
-    for (const key of Object.keys(payloadData)) delete payloadData[key]
+    Object.keys(payloadData).forEach(key => Reflect.deleteProperty(payloadData, key))
   })
 
   describe('wraps useStreamAction', () => {

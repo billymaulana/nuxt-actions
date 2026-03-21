@@ -240,7 +240,9 @@ describe('useInfiniteActionQuery', () => {
       await flushAsync()
 
       let resolveFetch: ((value: unknown) => void) | undefined
-      mockFetch.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve }))
+      mockFetch.mockReturnValue(new Promise((resolve) => {
+        resolveFetch = resolve
+      }))
 
       const promise = fetchNextPage()
       expect(isFetchingNextPage.value).toBe(true)

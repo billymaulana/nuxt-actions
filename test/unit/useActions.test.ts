@@ -134,7 +134,9 @@ describe('useActions', () => {
   describe('pending state', () => {
     it('sets pending to true during execution and false after', async () => {
       let resolveFetch: ((value: unknown) => void) | undefined
-      mockFetch.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve }))
+      mockFetch.mockReturnValue(new Promise((resolve) => {
+        resolveFetch = resolve
+      }))
 
       const { execute, pending } = useActions([createActionRef('action-a')])
 
