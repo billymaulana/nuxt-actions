@@ -340,4 +340,129 @@ describe('useActionQuery', () => {
       expect(callOpts.watch).toBe(false)
     })
   })
+
+  describe('transform option', () => {
+    it('applies transform function to successful data', async () => {
+      mockFetch.mockResolvedValue({
+        success: true,
+        data: [{ id: 2 }, { id: 1 }],
+      })
+
+      const { data } = useActionQuery(createActionRef('list'), undefined, {
+        transform: (items: unknown[]) => [...items].reverse(),
+      })
+
+      await vi.waitFor(() => expect(mockAsyncDataResult.data.value).not.toBeNull())
+
+      // The raw data was [{ id: 2 }, { id: 1 }], transform reverses it
+      expect(data.value).toEqual([{ id: 1 }, { id: 2 }])
+    })
+
+    it('returns raw data when no transform is provided', async () => {
+      mockFetch.mockResolvedValue({
+        success: true,
+        data: { name: 'raw' },
+      })
+
+      const { data } = useActionQuery(createActionRef('get-item'))
+
+      await vi.waitFor(() => expect(mockAsyncDataResult.data.value).not.toBeNull())
+
+      expect(data.value).toEqual({ name: 'raw' })
+    })
+  })
+
+  describe('enabled option', () => {
+    it('sets immediate to false when enabled is false', () => {
+      mockFetch.mockReturnValue(new Promise(() => {}))
+
+      useActionQuery(createActionRef('test'), undefined, {
+        enabled: false,
+      })
+
+      expect(mockUseAsyncData).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({
+          immediate: false,
+        }),
+      )
+    })
+
+    it('sets immediate to true when enabled is true', () => {
+      mockFetch.mockReturnValue(new Promise(() => {}))
+
+      useActionQuery(createActionRef('test'), undefined, {
+        enabled: true,
+      })
+
+      expect(mockUseAsyncData).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({
+          immediate: true,
+        }),
+      )
+    })
+
+    it('sets immediate to true when enabled is undefined (default)', () => {
+      mockFetch.mockReturnValue(new Promise(() => {}))
+
+      useActionQuery(createActionRef('test'))
+
+      expect(mockUseAsyncData).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({
+          immediate: true,
+        }),
+      )
+    })
+  })
+
+  describe('refetchInterval option', () => {
+    it('calls setInterval when refetchInterval is provided', () => {
+      vi.useFakeTimers()
+      mockFetch.mockReturnValue(new Promise(() => {}))
+
+      useActionQuery(createActionRef('polling'), undefined, {
+        refetchInterval: 3000,
+      })
+
+      // Advance timers to trigger the interval
+      vi.advanceTimersByTime(3000)
+      expect(mockRefresh).toHaveBeenCalledTimes(1)
+
+      vi.advanceTimersByTime(3000)
+      expect(mockRefresh).toHaveBeenCalledTimes(2)
+
+      vi.useRealTimers()
+    })
+
+    it('does not call setInterval when refetchInterval is false', () => {
+      vi.useFakeTimers()
+      mockFetch.mockReturnValue(new Promise(() => {}))
+
+      useActionQuery(createActionRef('no-poll'), undefined, {
+        refetchInterval: false,
+      })
+
+      vi.advanceTimersByTime(10000)
+      expect(mockRefresh).not.toHaveBeenCalled()
+
+      vi.useRealTimers()
+    })
+
+    it('does not call setInterval when refetchInterval is not provided', () => {
+      vi.useFakeTimers()
+      mockFetch.mockReturnValue(new Promise(() => {}))
+
+      useActionQuery(createActionRef('default'))
+
+      vi.advanceTimersByTime(10000)
+      expect(mockRefresh).not.toHaveBeenCalled()
+
+      vi.useRealTimers()
+    })
+  })
 })

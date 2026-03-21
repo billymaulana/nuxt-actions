@@ -818,6 +818,64 @@ describe('useAction', () => {
     })
   })
 
+  describe('Nuxt 4 compatibility', () => {
+    it('falls back to global $fetch when nuxtApp.$fetch is undefined', async () => {
+      const globalFetchSpy = vi.fn().mockResolvedValue({ success: true, data: { nuxt4: true } })
+
+      // Stub globalThis.$fetch so the fallback path has something to call
+      const originalGlobalFetch = (globalThis as Record<string, unknown>).$fetch
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).$fetch = globalFetchSpy
+
+      // Reset module registry so the fresh import picks up the new mock
+      vi.resetModules()
+
+      vi.doMock('vue', async () => {
+        const actual = await vi.importActual<typeof import('vue')>('vue')
+        return { ...actual, onScopeDispose: vi.fn() }
+      })
+
+      vi.doMock('#app', () => ({
+        useNuxtApp: () => ({}), // No $fetch — simulates Nuxt 4
+      }))
+
+      try {
+        const { useAction: useActionNuxt4 } = await import('../../src/runtime/composables/useAction')
+
+        const { execute, data } = useActionNuxt4('/api/nuxt4-test')
+        await execute({ test: true })
+
+        expect(globalFetchSpy).toHaveBeenCalledWith('/api/nuxt4-test', expect.objectContaining({
+          method: 'POST',
+          body: { test: true },
+        }))
+        expect(data.value).toEqual({ nuxt4: true })
+      }
+      finally {
+        // Restore global $fetch
+        if (originalGlobalFetch !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(globalThis as any).$fetch = originalGlobalFetch
+        }
+        else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          delete (globalThis as any).$fetch
+        }
+
+        // Reset modules again and restore original mocks for subsequent tests
+        vi.resetModules()
+
+        vi.doMock('vue', async () => {
+          const actual = await vi.importActual<typeof import('vue')>('vue')
+          return { ...actual, onScopeDispose: vi.fn() }
+        })
+        vi.doMock('#app', () => ({
+          useNuxtApp: () => ({ $fetch: mockFetch }),
+        }))
+      }
+    })
+  })
+
   describe('onScopeDispose cleanup', () => {
     it('aborts in-flight request when scope is disposed', async () => {
       const mockedDispose = vi.mocked(onScopeDispose)

@@ -47,6 +47,10 @@ export function useAction(
 ): UseActionReturn<unknown, unknown> {
   const nuxtApp = useNuxtApp()
 
+  // Nuxt 3 exposes $fetch on nuxtApp; Nuxt 4 removed it — fall back to global $fetch
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const appFetch: typeof $fetch = (nuxtApp as any).$fetch ?? $fetch
+
   let path: string
   let method: string
 
@@ -120,13 +124,13 @@ export function useAction(
         signal: controller.signal,
       })
 
-      const result = await (nuxtApp.$fetch as typeof $fetch)<ActionResult<unknown>>(
+      const result = await appFetch<ActionResult<unknown>>(
         path,
         fetchOptions,
       )
 
       if (result.success) {
-        data.value = result.data
+        data.value = options.transform ? options.transform(result.data as never) : result.data
         status.value = 'success'
         options.onSuccess?.(result.data)
         options.onSettled?.(result)

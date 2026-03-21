@@ -23,6 +23,13 @@ export interface ModuleOptions {
    * @default 'actions'
    */
   actionsDir?: string
+
+  /**
+   * Enable action file colocation with pages.
+   * When true, also scans `pages/ ** /actions/` directories for action files.
+   * @default false
+   */
+  colocate?: boolean
 }
 
 // ── Helper functions ──────────────────────────────────────────────
@@ -211,6 +218,7 @@ export default defineNuxtModule<ModuleOptions>({
   defaults: {
     enabled: true,
     actionsDir: 'actions',
+    colocate: false,
   },
   setup(options, nuxt) {
     if (!options.enabled) return
@@ -232,6 +240,31 @@ export default defineNuxtModule<ModuleOptions>({
 
     // Scan for action files — reuse buildScannedActions to avoid duplication
     const actionFiles = scanActionFiles(actionsDirPath)
+
+    // ── Colocated actions: scan pages/**/actions/ ─────────────────
+    if (options.colocate) {
+      const pagesDir = join(nuxt.options.srcDir, 'pages')
+      if (existsSync(pagesDir)) {
+        const scanPagesForActions = (dir: string, prefix = ''): void => {
+          if (!existsSync(dir)) return
+          for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('_')) continue
+            const fullPath = join(dir, entry.name)
+            const newPrefix = prefix ? `${prefix}/${entry.name}` : entry.name
+            if (entry.name === 'actions') {
+              // Found an actions/ directory — scan it
+              actionFiles.push(...scanActionFiles(fullPath, newPrefix))
+            }
+            else {
+              scanPagesForActions(fullPath, newPrefix)
+            }
+          }
+        }
+        scanPagesForActions(pagesDir)
+        logger.info(`Colocated action scanning enabled — found ${actionFiles.length} total action files`)
+      }
+    }
+
     const scannedActions = buildScannedActions(actionFiles, nuxt, actionsDir, msg => logger.warn(msg))
 
     // ── Register Nitro virtual handlers ────────────────────────

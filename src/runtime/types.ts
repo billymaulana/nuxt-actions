@@ -189,6 +189,8 @@ export interface UseActionOptions<TInput, TOutput> {
   debounce?: number
   /** Throttle execute calls to at most once per this many milliseconds. Mutually exclusive with debounce. */
   throttle?: number
+  /** Transform response data before storing in `data` ref */
+  transform?: (data: TOutput) => TOutput
   onSuccess?: (data: TOutput) => void
   onError?: (error: ActionError) => void
   onSettled?: (result: ActionResult<TOutput>) => void
@@ -224,6 +226,8 @@ export interface UseOptimisticActionOptions<TInput, TOutput> {
   throttle?: number
   currentData: globalThis.Ref<TOutput> | globalThis.ComputedRef<TOutput>
   updateFn: (input: TInput, currentData: TOutput) => TOutput
+  /** Transform response data before storing in `data` ref */
+  transform?: (data: TOutput) => TOutput
   onSuccess?: (data: TOutput) => void
   onError?: (error: ActionError) => void
   onSettled?: (result: ActionResult<TOutput>) => void
@@ -245,7 +249,7 @@ export interface UseOptimisticActionReturn<TInput, TOutput> {
 
 // ── useActionQuery Options ────────────────────────────────────────
 
-export interface UseActionQueryOptions {
+export interface UseActionQueryOptions<TOutput = unknown> {
   /** Run on SSR. Default: true */
   server?: boolean
   /** Don't block navigation. Default: false */
@@ -253,7 +257,17 @@ export interface UseActionQueryOptions {
   /** Execute immediately. Default: true */
   immediate?: boolean
   /** Default value factory when data is null */
-  default?: () => unknown
+  default?: () => TOutput
+  /** Auto-refetch interval in milliseconds. false to disable. */
+  refetchInterval?: number | false
+  /** Refetch when the browser tab regains focus. Default: false */
+  refetchOnFocus?: boolean
+  /** Refetch when the network reconnects. Default: false */
+  refetchOnReconnect?: boolean
+  /** Conditionally enable/disable fetching. Reactive refs supported. */
+  enabled?: boolean | globalThis.Ref<boolean> | globalThis.ComputedRef<boolean>
+  /** Transform response data before storing in `data` computed */
+  transform?: (data: TOutput) => TOutput
 }
 
 export interface UseActionQueryReturn<TOutput> {
@@ -316,4 +330,110 @@ export interface UseFormActionReturn<TInput, TOutput> {
   data: Readonly<globalThis.Ref<TOutput | null>>
   /** Whether a submission is currently in flight */
   isSubmitting: globalThis.ComputedRef<boolean>
+}
+
+// ── useInfiniteActionQuery ──────────────────────────────────────
+
+export interface UseInfiniteActionQueryOptions<TOutput = unknown> {
+  /** Run on SSR. Default: true */
+  server?: boolean
+  /** Don't block navigation. Default: false */
+  lazy?: boolean
+  /** Conditionally enable/disable fetching */
+  enabled?: boolean | globalThis.Ref<boolean> | globalThis.ComputedRef<boolean>
+  /** Extract the next page param from the last fetched page. Return undefined to signal no more pages. */
+  getNextPageParam: (lastPage: TOutput, allPages: TOutput[]) => unknown | undefined
+  /** Initial page param for the first request. Default: undefined (no param) */
+  initialPageParam?: unknown
+  /** Transform each page's data before storing */
+  transform?: (data: TOutput) => TOutput
+}
+
+export interface UseInfiniteActionQueryReturn<TOutput> {
+  pages: Readonly<globalThis.Ref<TOutput[]>>
+  data: globalThis.ComputedRef<TOutput | null>
+  error: Readonly<globalThis.Ref<ActionError | null>>
+  status: Readonly<globalThis.Ref<'idle' | 'pending' | 'success' | 'error'>>
+  pending: Readonly<globalThis.Ref<boolean>>
+  isFetchingNextPage: Readonly<globalThis.Ref<boolean>>
+  hasNextPage: globalThis.ComputedRef<boolean>
+  fetchNextPage: () => Promise<void>
+  refresh: () => Promise<void>
+  clear: () => void
+}
+
+// ── useActions (batch/parallel execution) ───────────────────────
+
+export interface UseActionsOptions {
+  /** Execute actions in parallel (default) or sequentially */
+  mode?: 'parallel' | 'sequential'
+}
+
+// ── useActionState (progressive enhancement) ────────────────────
+
+export interface UseActionStateOptions<TOutput> {
+  /** Initial state before any action has completed */
+  initialState?: TOutput | null
+}
+
+export interface UseActionStateReturn<_TInput, TOutput> {
+  /** Current state — updated after each successful action execution */
+  state: Readonly<globalThis.Ref<TOutput | null>>
+  error: Readonly<globalThis.Ref<ActionError | null>>
+  pending: Readonly<globalThis.Ref<boolean>>
+  /** Submit handler for FormData (use with @submit.prevent) */
+  formAction: (formData: FormData) => Promise<void>
+  /** Bind to <form> for progressive enhancement */
+  formProps: globalThis.ComputedRef<{ action: string, method: string }>
+}
+
+// ── Rate Limiting Middleware ─────────────────────────────────────
+
+export interface RateLimitConfig {
+  /** Maximum number of requests per window */
+  limit: number
+  /** Time window in milliseconds. Default: 60000 (1 minute) */
+  window?: number
+  /** Custom key function to identify the client. Default: IP address */
+  keyFn?: (event: H3Event) => string
+  /** Custom error message. Default: 'Too many requests' */
+  message?: string
+}
+
+// ── CSRF Middleware ──────────────────────────────────────────────
+
+export interface CsrfConfig {
+  /** Cookie name for the CSRF token. Default: '_csrf' */
+  cookieName?: string
+  /** Header name for the CSRF token. Default: 'x-csrf-token' */
+  headerName?: string
+  /** Token length in bytes. Default: 32 */
+  tokenLength?: number
+}
+
+// ── Streaming Query with Cache ──────────────────────────────────
+
+export interface UseStreamActionQueryOptions<TChunk = unknown> {
+  /** HTTP method override. Default: 'POST' */
+  method?: HttpMethod
+  headers?: Record<string, string> | (() => Record<string, string>)
+  timeout?: number
+  /** Cache key. If provided, completed stream results are cached and restored on remount. */
+  cacheKey?: string
+  onChunk?: (chunk: TChunk) => void
+  onDone?: (allChunks: TChunk[]) => void
+  onError?: (error: ActionError) => void
+}
+
+export interface UseStreamActionQueryReturn<TInput, TChunk> {
+  execute: (input: TInput) => Promise<void>
+  stop: () => void
+  chunks: Readonly<globalThis.Ref<TChunk[]>>
+  data: Readonly<globalThis.Ref<TChunk | null>>
+  status: Readonly<globalThis.Ref<StreamStatus>>
+  error: Readonly<globalThis.Ref<ActionError | null>>
+  /** Whether the result was served from cache */
+  fromCache: Readonly<globalThis.Ref<boolean>>
+  /** Clear the cached stream result */
+  clearCache: () => void
 }

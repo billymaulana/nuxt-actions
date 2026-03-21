@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.1.0 (2026-03-21)
+
+### Bug Fixes
+
+- Fix `nuxtApp.$fetch` undefined in Nuxt 4 — composables now fall back to global `$fetch` (#6)
+
+### Features
+
+- `useActionQuery`: add `refetchInterval` option for auto-polling at configurable intervals
+- `useActionQuery`: add `refetchOnFocus` to refetch when browser tab regains focus
+- `useActionQuery`: add `refetchOnReconnect` to refetch when network reconnects
+- `useActionQuery`: add `enabled` option for conditional fetching (supports reactive refs)
+- `useActionQuery`: add `transform` option to transform response data before storing
+- `useAction` / `useOptimisticAction`: add `transform` option for response data transformation
+- New composable `useInfiniteActionQuery` for infinite scroll and cursor-based pagination
+- New composable `useActions` for batch/parallel execution of multiple actions
+- New composable `useActionState` for progressive enhancement with HTML forms
+- New composable `useStreamActionQuery` — streaming with automatic cache persistence
+- New utility `prefetchAction` to pre-warm cache for action queries (e.g. on hover)
+- New server utility `returnValidationErrors` for cleaner field-level validation in handlers
+- New server middleware `rateLimitMiddleware` — in-memory rate limiting per action
+- New server middleware `csrfMiddleware` — CSRF token protection for mutation actions
+- Action file colocation with pages via `colocate: true` module option
+
 ## v1.0.3 (2026-02-21)
 
 ### Fixes
