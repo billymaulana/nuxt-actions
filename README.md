@@ -374,7 +374,9 @@ Define a typed middleware function. `createMiddleware` is an alias that signals 
 | `onError` | `(error) => void` | - | Error callback |
 | `onSettled` | `(result) => void` | - | Settled callback |
 
-**Returns:** `{ execute, executeAsync, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
+Returns:
+
+`{ execute, executeAsync, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
 
 #### `useOptimisticAction<TInput, TOutput>(path, options)`
 
@@ -386,7 +388,9 @@ Define a typed middleware function. `createMiddleware` is an alias that signals 
 | `currentData` | `Ref<TOutput>` | Source of truth data ref |
 | `updateFn` | `(input, current) => TOutput` | Optimistic update function |
 
-**Returns:** `{ execute, optimisticData, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
+Returns:
+
+`{ execute, optimisticData, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
 
 #### `useActionQuery(action, input?, options?)`
 
@@ -399,7 +403,9 @@ SSR-capable GET action query wrapping `useAsyncData`:
 | `immediate` | `boolean` | `true` | Execute immediately |
 | `default` | `() => T` | - | Default value factory |
 
-**Returns:** `{ data, error, status, pending, refresh, clear }`
+Returns:
+
+`{ data, error, status, pending, refresh, clear }`
 
 #### `useStreamAction(action, options?)`
 
@@ -411,7 +417,9 @@ Client composable for streaming server actions:
 | `onDone` | `(allChunks) => void` | Called when stream completes |
 | `onError` | `(error) => void` | Called on error |
 
-**Returns:** `{ execute, stop, chunks, data, status, error }`
+Returns:
+
+`{ execute, stop, chunks, data, status, error }`
 
 #### `defineStreamAction(options)`
 
@@ -441,7 +449,7 @@ Server-side streaming action with SSE:
 <tr><td>SSR queries</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#10060;</td></tr>
 <tr><td>Streaming actions (SSE)</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
 <tr><td>Retry / backoff</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-<tr><td>Request deduplication</td><td align="center">&#9989;</td><td align="center">&#11093;</td><td align="center">&#10060;</td></tr>
+<tr><td>Request deduplication</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
 <tr><td>Output schema validation</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#9989;</td></tr>
 <tr><td>DevTools integration</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
 <tr><td>HMR type updates</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#10060;</td></tr>
