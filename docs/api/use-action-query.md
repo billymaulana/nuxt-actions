@@ -33,7 +33,7 @@ function useActionQuery<TInput = void, TOutput = unknown>(
 ## Options
 
 ```ts
-interface UseActionQueryOptions {
+interface UseActionQueryOptions<TOutput = unknown> {
   /** Run on SSR. Default: true */
   server?: boolean
   /** Don't block navigation. Default: false */
@@ -41,7 +41,17 @@ interface UseActionQueryOptions {
   /** Execute immediately. Default: true */
   immediate?: boolean
   /** Default value factory when data is null */
-  default?: () => unknown
+  default?: () => TOutput
+  /** Auto-refetch interval in milliseconds. Set to false to disable. */
+  refetchInterval?: number | false
+  /** Refetch when tab becomes visible. Default: false */
+  refetchOnFocus?: boolean
+  /** Refetch when network comes back online. Default: false */
+  refetchOnReconnect?: boolean
+  /** Conditionally enable/disable fetching. Supports reactive refs. Default: true */
+  enabled?: boolean | Ref<boolean> | ComputedRef<boolean>
+  /** Transform response data before storing in the data computed ref */
+  transform?: (data: TOutput) => TOutput
 }
 ```
 
@@ -64,6 +74,70 @@ interface UseActionQueryOptions {
 
 - **Type:** `() => unknown`
 - **Description:** Factory function returning the default value when data is `null` (before first fetch or on error).
+
+### `refetchInterval`
+
+- **Type:** `number | false`
+- **Default:** `undefined`
+- **Description:** Auto-refetch interval in milliseconds. Set to `false` to disable. The timer starts after each successful or failed fetch and fires continuously in the background.
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  refetchInterval: 5000, // Refetch every 5 seconds
+})
+```
+
+### `refetchOnFocus`
+
+- **Type:** `boolean`
+- **Default:** `false`
+- **Description:** Refetch data when the browser tab becomes visible (uses `visibilitychange` event). Client-only -- has no effect during SSR.
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  refetchOnFocus: true,
+})
+```
+
+### `refetchOnReconnect`
+
+- **Type:** `boolean`
+- **Default:** `false`
+- **Description:** Refetch data when the network comes back online (uses `online` event). Client-only -- has no effect during SSR.
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  refetchOnReconnect: true,
+})
+```
+
+### `enabled`
+
+- **Type:** `boolean | Ref<boolean> | ComputedRef<boolean>`
+- **Default:** `true`
+- **Description:** Conditionally enable/disable fetching. Supports reactive refs -- when a reactive ref becomes `true`, the query is triggered. When `false`, no fetch is made and existing data is preserved.
+
+```ts
+const userId = ref<number | null>(null)
+const isReady = computed(() => userId.value !== null)
+
+const { data } = useActionQuery(
+  getUserProfile,
+  () => ({ id: userId.value! }),
+  { enabled: isReady },
+)
+```
+
+### `transform`
+
+- **Type:** `(data: TOutput) => TOutput`
+- **Description:** Transform response data before storing in the `data` computed ref. Runs after `ActionResult` unwrapping.
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  transform: (todos) => todos.sort((a, b) => b.id - a.id),
+})
+```
 
 ---
 
@@ -247,6 +321,7 @@ const { data } = useActionQuery<void, User[]>('/api/users')
 
 ## See Also
 
+- [useInfiniteActionQuery](/api/use-infinite-action-query) -- Infinite scroll / cursor-based pagination
 - [useAction](/api/use-action) -- Mutation-style action composable
 - [defineAction](/api/define-action) -- Server action definition
 - [Types Reference](/api/types) -- Full type definitions

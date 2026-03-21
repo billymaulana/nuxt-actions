@@ -38,6 +38,8 @@ interface UseActionOptions<TInput, TOutput> {
   dedupe?: 'cancel' | 'defer'
   debounce?: number
   throttle?: number
+  /** Transform response data before storing in `data` ref */
+  transform?: (data: TOutput) => TOutput
   onSuccess?: (data: TOutput) => void
   onError?: (error: ActionError) => void
   onSettled?: (result: ActionResult<TOutput>) => void
@@ -121,6 +123,19 @@ watch(searchQuery, (q) => execute({ q }))
 const { execute } = useAction('/api/track', {
   method: 'POST',
   throttle: 1000, // At most once per second
+})
+```
+
+### `transform`
+
+- **Type:** `(data: TOutput) => TOutput`
+- **Required:** No
+- **Description:** Transform response data before storing in the `data` ref. The transformation runs after receiving a successful response from the server.
+
+```ts
+const { execute, data } = useAction<void, Todo[]>('/api/todos', {
+  method: 'GET',
+  transform: (todos) => todos.sort((a, b) => b.id - a.id),
 })
 ```
 
