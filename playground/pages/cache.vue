@@ -20,13 +20,25 @@ async function addTodo() {
   <div>
     <h2>Smart Cache: mutation auto-refetches the list</h2>
     <form @submit.prevent="addTodo">
-      <input v-model="title" placeholder="New todo" >
-      <button :disabled="isExecuting">Add</button>
+      <input
+        v-model="title"
+        placeholder="New todo"
+      >
+      <button :disabled="isExecuting">
+        Add
+      </button>
     </form>
 
-    <p v-if="status === 'pending'">Loading...</p>
+    <p v-if="status === 'pending'">
+      Loading...
+    </p>
     <ul>
-      <li v-for="todo in todos" :key="todo.id">{{ todo.title }}</li>
+      <li
+        v-for="todo in todos"
+        :key="todo.id"
+      >
+        {{ todo.title }}
+      </li>
     </ul>
   </div>
 </template>
