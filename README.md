@@ -44,6 +44,8 @@ Works with <strong>Zod</strong>, <strong>Valibot</strong>, <strong>ArkType</stro
 - **Custom Headers** - Per-request auth tokens via static headers or function
 - **CLI Scaffold** - `npx nuxt-actions add <name>` generates a typed action file
 - **OpenAPI** - generate an OpenAPI 3.1 document + Swagger UI from your actions
+- **File Uploads** - multipart actions parse files into typed `ActionFile` fields
+- **Auth Preset** - `defineAuthMiddleware` populates `ctx.user` or rejects with 401
 - **HMR Type Updates** - Action file changes update types without restarting dev server
 - **DevTools Tab** - Nuxt DevTools integration showing registered actions
 - **Security Hardened** - Prototype pollution protection, error message sanitization, double `next()` prevention
