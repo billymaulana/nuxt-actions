@@ -12,6 +12,12 @@
 
 ### Features
 
+- **Smart cache invalidation** — `useActionMutation` auto-refetches affected queries after a successful mutation, targeting typed action references and/or string tags. Adds `invalidateTags()`, array support in `invalidateActions()`, and a `tags` option on `useActionQuery`.
+- **CLI scaffolding** — `npx nuxt-actions add <name>` generates a typed action file (`--method`, `--dir`, `--schema`).
+- **DevTools** — the actions tab lists each endpoint with a ready-to-copy curl snippet and an "Open docs" link.
+- **OpenAPI** — generate an OpenAPI 3.1 document (and optional Swagger UI) from your actions via the `openapi` module option. Precise bodies for arktype and Zod 4; graceful fallback otherwise.
+- **File uploads** — `multipart/form-data` requests are parsed into typed `ActionFile` fields.
+- **Auth preset** — `defineAuthMiddleware` resolves the current user into `ctx.user` or rejects with 401.
 - `useOptimisticAction` accepts a distinct `TData` for `currentData`/`updateFn`/`optimisticData`, so the optimistic source can be a collection different from the action output (e.g. optimistically updating a list).
 - `ActionMiddleware` may return `void` (for the chain-skip pattern where a middleware does not call `next()`).
 
