@@ -211,6 +211,14 @@ export interface UseActionReturn<TInput, TOutput> {
   reset: () => void
 }
 
+export interface UseActionMutationOptions<TInput, TOutput>
+  extends UseActionOptions<TInput, TOutput> {
+  /** Action references (objects) and/or tag strings to invalidate after a successful mutation */
+  invalidates?: Array<TypedActionReference | string>
+  /** Await cache invalidation before execute() resolves. Default: true */
+  awaitInvalidation?: boolean
+}
+
 // ── useOptimisticAction Options ───────────────────────────────────
 
 export interface UseOptimisticActionOptions<TInput, TOutput, TData = TOutput> {
@@ -270,6 +278,8 @@ export interface UseActionQueryOptions<TOutput = unknown> {
   enabled?: boolean | Ref<boolean> | ComputedRef<boolean>
   /** Transform response data before storing in `data` computed */
   transform?: (data: TOutput) => TOutput
+  /** Cache tags for group invalidation via invalidateTags() or a mutation's invalidates */
+  tags?: string[]
 }
 
 export interface UseActionQueryReturn<TOutput> {
