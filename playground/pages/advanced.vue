@@ -21,7 +21,7 @@
         v-if="retryAction.hasSucceeded.value"
         class="success"
       >
-        Success on attempt {{ retryAction.data.value.attempt }}: {{ retryAction.data.value.message }}
+        Success on attempt {{ retryAction.data.value?.attempt }}: {{ retryAction.data.value?.message }}
       </div>
       <div
         v-if="retryAction.hasErrored.value"
@@ -83,14 +83,14 @@
         class="success"
       >
         <strong>Static headers echoed:</strong>
-        <pre>{{ JSON.stringify(staticHeaderAction.data.value.receivedHeaders, null, 2) }}</pre>
+        <pre>{{ JSON.stringify(staticHeaderAction.data.value?.receivedHeaders, null, 2) }}</pre>
       </div>
       <div
         v-if="dynamicHeaderAction.hasSucceeded.value"
         class="success"
       >
         <strong>Dynamic headers echoed:</strong>
-        <pre>{{ JSON.stringify(dynamicHeaderAction.data.value.receivedHeaders, null, 2) }}</pre>
+        <pre>{{ JSON.stringify(dynamicHeaderAction.data.value?.receivedHeaders, null, 2) }}</pre>
       </div>
       <pre>// Static headers
 useAction(echoHeaders, {

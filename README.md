@@ -173,11 +173,11 @@ Call server actions from Vue components with reactive state:
 
 ```vue
 <script setup lang="ts">
-const { execute, executeAsync, data, error, status, reset } = useAction<
-  { title: string },
-  { id: number; title: string }
->('/api/todos', {
-  method: 'POST',
+import { createTodo } from '#actions'
+
+// Input and output types are inferred end-to-end from the server action.
+// No manual generics, no method to specify — both come from `createTodo`.
+const { execute, executeAsync, data, error, status, reset } = useAction(createTodo, {
   onExecute(input) {
     console.log('Sending:', input)
   },
@@ -215,6 +215,8 @@ async function handleSubmitAsync(title: string) {
   </form>
 </template>
 ```
+
+> **Calling external or string-path endpoints?** `useAction` also accepts a plain path with explicit generics as a fallback — `useAction<TInput, TOutput>('/api/todos', { method: 'POST' })`. Prefer the typed reference from `#actions` for internal actions so types stay inferred automatically.
 
 ### Optimistic Updates: `useOptimisticAction`
 
@@ -361,7 +363,9 @@ Define a typed middleware function. `createMiddleware` is an alias that signals 
 
 ### Client Composables
 
-#### `useAction<TInput, TOutput>(path, options?)`
+#### `useAction(action, options?)` / `useAction<TInput, TOutput>(path, options?)`
+
+Two overloads: pass a typed reference from `#actions` for end-to-end inferred input/output (recommended), or a string path with explicit generics for external/untyped endpoints.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|

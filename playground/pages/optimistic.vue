@@ -5,7 +5,7 @@
 
     <section>
       <div
-        v-for="todo in (optimisticAction.optimisticData.value as typeof todos)"
+        v-for="todo in optimisticAction.optimisticData.value"
         :key="todo.id"
         style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #222;"
       >
@@ -80,8 +80,9 @@ const optimisticAction = useOptimisticAction(toggleTodo, {
   onSuccess(data) {
     // Sync local state with server truth
     const index = todos.value.findIndex(t => t.id === data.id)
-    if (index !== -1) {
-      todos.value[index] = { ...todos.value[index], done: data.done }
+    const existing = todos.value[index]
+    if (existing) {
+      todos.value[index] = { ...existing, done: data.done }
     }
   },
 })
