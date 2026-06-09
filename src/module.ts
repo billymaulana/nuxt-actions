@@ -11,12 +11,33 @@ import {
 } from '@nuxt/kit'
 import { setupDevtools } from './devtools'
 
+export interface OpenApiOptions {
+  /**
+   * Path that serves the OpenAPI JSON.
+   * @default '/_actions/openapi.json'
+   */
+  path?: string
+  /**
+   * Serve Swagger UI. true uses '/_actions/openapi'; a string sets a custom path.
+   * @default false
+   */
+  ui?: boolean | string
+  /** OpenAPI info block */
+  info?: { title?: string, version?: string, description?: string }
+}
+
 export interface ModuleOptions {
   /**
    * Enable or disable the module
    * @default true
    */
   enabled?: boolean
+
+  /**
+   * Generate an OpenAPI document from actions. false to disable.
+   * @default false
+   */
+  openapi?: boolean | OpenApiOptions
 
   /**
    * Directory name for action files (relative to server/)
