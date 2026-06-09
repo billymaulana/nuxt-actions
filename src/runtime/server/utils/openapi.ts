@@ -2,7 +2,7 @@ export type JsonSchema = Record<string, unknown>
 
 interface StandardLike {
   '~standard'?: { vendor?: string }
-  toJsonSchema?: () => JsonSchema
+  'toJsonSchema'?: () => JsonSchema
 }
 
 const GENERIC: JsonSchema = { type: 'object' }
