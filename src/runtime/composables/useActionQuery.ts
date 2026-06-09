@@ -113,7 +113,7 @@ export function useActionQuery(
       server: options.server ?? true,
       lazy: options.lazy ?? false,
       immediate: (options.immediate ?? true) && isEnabled.value,
-      watch: input !== undefined ? [() => toValue(input)] : false,
+      watch: input !== undefined ? [() => toValue(input)] : undefined,
     },
   )
 

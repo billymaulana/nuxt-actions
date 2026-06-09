@@ -95,7 +95,7 @@ export function defineAction<
       // 2. Run middleware chain
       let ctx = {} as TCtx
       if (options.middleware?.length) {
-        ctx = await runMiddleware(event, options.middleware, options.metadata ?? {})
+        ctx = await runMiddleware(event, options.middleware, options.metadata ?? {}) as TCtx
       }
 
       // 3. Execute handler — input is validated by Standard Schema at this point
@@ -332,7 +332,7 @@ export async function runMiddleware(
       event,
       ctx,
       metadata,
-      next: async (opts) => {
+      next: (async (opts?: { ctx?: Record<string, unknown> }) => {
         if (nextCalled) {
           throw new Error('[nuxt-actions] Middleware called next() more than once')
         }
@@ -341,7 +341,7 @@ export async function runMiddleware(
           ctx = deepMerge(ctx, opts.ctx)
         }
         return ctx
-      },
+      }) as <TNewCtx extends Record<string, unknown>>(opts?: { ctx: TNewCtx }) => Promise<TNewCtx & Record<string, unknown>>,
     })
 
     // If middleware did not call next(), stop the chain.

@@ -1,5 +1,16 @@
 import type { Nuxt } from '@nuxt/schema'
 
+interface DevtoolsCustomTab {
+  name: string
+  title: string
+  icon?: string
+  view: {
+    type: 'launch'
+    description?: string
+    actions?: { label: string, handle: () => void }[]
+  }
+}
+
 interface ActionInfo {
   name: string
   path: string
@@ -7,7 +18,13 @@ interface ActionInfo {
 }
 
 export function setupDevtools(nuxt: Nuxt, actions: ActionInfo[]) {
-  nuxt.hook('devtools:customTabs', (tabs) => {
+  /* `devtools:customTabs` is provided by @nuxt/devtools at runtime but is not part of the base NuxtHooks types. */
+  const registerCustomTab = nuxt.hook as unknown as (
+    name: 'devtools:customTabs',
+    cb: (tabs: DevtoolsCustomTab[]) => void,
+  ) => void
+
+  registerCustomTab('devtools:customTabs', (tabs) => {
     const summary = actions.length === 0
       ? 'No action files found in server/actions/'
       : actions

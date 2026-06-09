@@ -331,13 +331,13 @@ describe('useActionQuery', () => {
       expect(watchFns[0]()).toEqual({ q: 'test' })
     })
 
-    it('passes watch: false when no input', () => {
+    it('omits the watch option when no input', () => {
       mockFetch.mockReturnValue(new Promise(() => {}))
 
       useActionQuery(createActionRef('list'))
 
       const callOpts = mockUseAsyncData.mock.calls[0][2] as Record<string, unknown>
-      expect(callOpts.watch).toBe(false)
+      expect(callOpts.watch).toBeUndefined()
     })
   })
 

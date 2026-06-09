@@ -1,4 +1,4 @@
-import { refreshNuxtData, clearNuxtData } from '#app'
+import { refreshNuxtData, clearNuxtData, useNuxtApp } from '#app'
 import type { TypedActionReference } from '../types'
 
 const CACHE_PREFIX = 'action:'
@@ -11,6 +11,15 @@ function resolvePrefix(actionOrPath: string | TypedActionReference): string {
     return `${CACHE_PREFIX}${actionOrPath}:`
   }
   return `${CACHE_PREFIX}/api/_actions/${actionOrPath.__actionPath}:`
+}
+
+/**
+ * Collect the keys of registered action queries matching a prefix.
+ * `refreshNuxtData` only accepts explicit keys, so prefix matching is resolved here.
+ */
+function actionKeys(prefix: string): string[] {
+  const registry = useNuxtApp()._asyncData ?? {}
+  return Object.keys(registry).filter(key => key.startsWith(prefix))
 }
 
 /**
@@ -31,18 +40,10 @@ function resolvePrefix(actionOrPath: string | TypedActionReference): string {
 export async function invalidateActions(
   actionOrPath?: string | TypedActionReference,
 ): Promise<void> {
-  if (actionOrPath) {
-    const prefix = resolvePrefix(actionOrPath)
-    await refreshNuxtData((key) => {
-      if (typeof key !== 'string') return false
-      return key.startsWith(prefix)
-    })
-  }
-  else {
-    await refreshNuxtData((key) => {
-      if (typeof key !== 'string') return false
-      return key.startsWith(CACHE_PREFIX)
-    })
+  const prefix = actionOrPath ? resolvePrefix(actionOrPath) : CACHE_PREFIX
+  const keys = actionKeys(prefix)
+  if (keys.length > 0) {
+    await refreshNuxtData(keys)
   }
 }
 

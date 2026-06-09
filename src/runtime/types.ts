@@ -1,3 +1,4 @@
+import type { Ref, ComputedRef } from 'vue'
 import type { H3Event } from 'h3'
 
 // ── Standard Schema v1 ────────────────────────────────────────────
@@ -87,7 +88,7 @@ export type ActionMiddleware<
   TCtxOut = TCtxIn,
 > = (context: MiddlewareContext<TCtxIn> & {
   next: <TNewCtx extends Record<string, unknown>>(opts?: { ctx: TNewCtx }) => Promise<TNewCtx & TCtxIn>
-}) => Promise<TCtxOut & TCtxIn>
+}) => Promise<TCtxOut & TCtxIn> | Promise<void>
 
 // ── Handler ───────────────────────────────────────────────────────
 
@@ -200,19 +201,19 @@ export interface UseActionOptions<TInput, TOutput> {
 export interface UseActionReturn<TInput, TOutput> {
   execute: (input: TInput) => Promise<ActionResult<TOutput>>
   executeAsync: (input: TInput) => Promise<TOutput>
-  data: Readonly<globalThis.Ref<TOutput | null>>
-  error: Readonly<globalThis.Ref<ActionError | null>>
-  status: Readonly<globalThis.Ref<ActionStatus>>
-  isIdle: globalThis.ComputedRef<boolean>
-  isExecuting: globalThis.ComputedRef<boolean>
-  hasSucceeded: globalThis.ComputedRef<boolean>
-  hasErrored: globalThis.ComputedRef<boolean>
+  data: Readonly<Ref<TOutput | null>>
+  error: Readonly<Ref<ActionError | null>>
+  status: Readonly<Ref<ActionStatus>>
+  isIdle: ComputedRef<boolean>
+  isExecuting: ComputedRef<boolean>
+  hasSucceeded: ComputedRef<boolean>
+  hasErrored: ComputedRef<boolean>
   reset: () => void
 }
 
 // ── useOptimisticAction Options ───────────────────────────────────
 
-export interface UseOptimisticActionOptions<TInput, TOutput> {
+export interface UseOptimisticActionOptions<TInput, TOutput, TData = TOutput> {
   method?: HttpMethod
   /** Static headers or a function returning headers (e.g. for auth tokens) */
   headers?: Record<string, string> | (() => Record<string, string>)
@@ -224,8 +225,9 @@ export interface UseOptimisticActionOptions<TInput, TOutput> {
   debounce?: number
   /** Throttle execute calls to at most once per this many milliseconds. Mutually exclusive with debounce. */
   throttle?: number
-  currentData: globalThis.Ref<TOutput> | globalThis.ComputedRef<TOutput>
-  updateFn: (input: TInput, currentData: TOutput) => TOutput
+  /** The reactive source being optimistically updated — often a collection distinct from the action output. */
+  currentData: Ref<TData> | ComputedRef<TData>
+  updateFn: (input: TInput, currentData: TData) => TData
   /** Transform response data before storing in `data` ref */
   transform?: (data: TOutput) => TOutput
   onSuccess?: (data: TOutput) => void
@@ -234,16 +236,16 @@ export interface UseOptimisticActionOptions<TInput, TOutput> {
   onExecute?: (input: TInput) => void
 }
 
-export interface UseOptimisticActionReturn<TInput, TOutput> {
+export interface UseOptimisticActionReturn<TInput, TOutput, TData = TOutput> {
   execute: (input: TInput) => Promise<ActionResult<TOutput>>
-  optimisticData: Readonly<globalThis.Ref<TOutput>>
-  data: Readonly<globalThis.Ref<TOutput | null>>
-  error: Readonly<globalThis.Ref<ActionError | null>>
-  status: Readonly<globalThis.Ref<ActionStatus>>
-  isIdle: globalThis.ComputedRef<boolean>
-  isExecuting: globalThis.ComputedRef<boolean>
-  hasSucceeded: globalThis.ComputedRef<boolean>
-  hasErrored: globalThis.ComputedRef<boolean>
+  optimisticData: Readonly<Ref<TData>>
+  data: Readonly<Ref<TOutput | null>>
+  error: Readonly<Ref<ActionError | null>>
+  status: Readonly<Ref<ActionStatus>>
+  isIdle: ComputedRef<boolean>
+  isExecuting: ComputedRef<boolean>
+  hasSucceeded: ComputedRef<boolean>
+  hasErrored: ComputedRef<boolean>
   reset: () => void
 }
 
@@ -265,16 +267,16 @@ export interface UseActionQueryOptions<TOutput = unknown> {
   /** Refetch when the network reconnects. Default: false */
   refetchOnReconnect?: boolean
   /** Conditionally enable/disable fetching. Reactive refs supported. */
-  enabled?: boolean | globalThis.Ref<boolean> | globalThis.ComputedRef<boolean>
+  enabled?: boolean | Ref<boolean> | ComputedRef<boolean>
   /** Transform response data before storing in `data` computed */
   transform?: (data: TOutput) => TOutput
 }
 
 export interface UseActionQueryReturn<TOutput> {
-  data: globalThis.ComputedRef<TOutput | null>
-  error: globalThis.ComputedRef<ActionError | null>
-  status: globalThis.Ref<'idle' | 'pending' | 'success' | 'error'>
-  pending: globalThis.Ref<boolean>
+  data: ComputedRef<TOutput | null>
+  error: ComputedRef<ActionError | null>
+  status: Ref<'idle' | 'pending' | 'success' | 'error'>
+  pending: Ref<boolean>
   refresh: () => Promise<void>
   clear: () => void
 }
@@ -298,10 +300,10 @@ export type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 export interface UseStreamActionReturn<TInput, TChunk> {
   execute: (input: TInput) => Promise<void>
   stop: () => void
-  chunks: Readonly<globalThis.Ref<TChunk[]>>
-  data: Readonly<globalThis.Ref<TChunk | null>>
-  status: Readonly<globalThis.Ref<StreamStatus>>
-  error: Readonly<globalThis.Ref<ActionError | null>>
+  chunks: Readonly<Ref<TChunk[]>>
+  data: Readonly<Ref<TChunk | null>>
+  status: Readonly<Ref<StreamStatus>>
+  error: Readonly<Ref<ActionError | null>>
 }
 
 // ── useFormAction Options ────────────────────────────────────────
@@ -317,19 +319,19 @@ export interface UseFormActionReturn<TInput, TOutput> {
   /** Submit the form (sends current field values to the action) */
   submit: () => Promise<ActionResult<TOutput>>
   /** Field-level validation errors from the server (VALIDATION_ERROR) */
-  fieldErrors: globalThis.ComputedRef<Record<string, string[]>>
+  fieldErrors: ComputedRef<Record<string, string[]>>
   /** Whether any field has been modified from initial values */
-  isDirty: globalThis.ComputedRef<boolean>
+  isDirty: ComputedRef<boolean>
   /** Reset fields to initial values and clear errors */
   reset: () => void
   /** Action status */
-  status: Readonly<globalThis.Ref<ActionStatus>>
+  status: Readonly<Ref<ActionStatus>>
   /** Last server error */
-  error: Readonly<globalThis.Ref<ActionError | null>>
+  error: Readonly<Ref<ActionError | null>>
   /** Last successful server response data */
-  data: Readonly<globalThis.Ref<TOutput | null>>
+  data: Readonly<Ref<TOutput | null>>
   /** Whether a submission is currently in flight */
-  isSubmitting: globalThis.ComputedRef<boolean>
+  isSubmitting: ComputedRef<boolean>
 }
 
 // ── useInfiniteActionQuery ──────────────────────────────────────
@@ -340,7 +342,7 @@ export interface UseInfiniteActionQueryOptions<TOutput = unknown> {
   /** Don't block navigation. Default: false */
   lazy?: boolean
   /** Conditionally enable/disable fetching */
-  enabled?: boolean | globalThis.Ref<boolean> | globalThis.ComputedRef<boolean>
+  enabled?: boolean | Ref<boolean> | ComputedRef<boolean>
   /** Extract the next page param from the last fetched page. Return undefined to signal no more pages. */
   getNextPageParam: (lastPage: TOutput, allPages: TOutput[]) => unknown | undefined
   /** Initial page param for the first request. Default: undefined (no param) */
@@ -350,13 +352,13 @@ export interface UseInfiniteActionQueryOptions<TOutput = unknown> {
 }
 
 export interface UseInfiniteActionQueryReturn<TOutput> {
-  pages: Readonly<globalThis.Ref<TOutput[]>>
-  data: globalThis.ComputedRef<TOutput | null>
-  error: Readonly<globalThis.Ref<ActionError | null>>
-  status: Readonly<globalThis.Ref<'idle' | 'pending' | 'success' | 'error'>>
-  pending: Readonly<globalThis.Ref<boolean>>
-  isFetchingNextPage: Readonly<globalThis.Ref<boolean>>
-  hasNextPage: globalThis.ComputedRef<boolean>
+  pages: Readonly<Ref<TOutput[]>>
+  data: ComputedRef<TOutput | null>
+  error: Readonly<Ref<ActionError | null>>
+  status: Readonly<Ref<'idle' | 'pending' | 'success' | 'error'>>
+  pending: Readonly<Ref<boolean>>
+  isFetchingNextPage: Readonly<Ref<boolean>>
+  hasNextPage: ComputedRef<boolean>
   fetchNextPage: () => Promise<void>
   refresh: () => Promise<void>
   clear: () => void
@@ -378,13 +380,13 @@ export interface UseActionStateOptions<TOutput> {
 
 export interface UseActionStateReturn<_TInput, TOutput> {
   /** Current state — updated after each successful action execution */
-  state: Readonly<globalThis.Ref<TOutput | null>>
-  error: Readonly<globalThis.Ref<ActionError | null>>
-  pending: Readonly<globalThis.Ref<boolean>>
+  state: Readonly<Ref<TOutput | null>>
+  error: Readonly<Ref<ActionError | null>>
+  pending: Readonly<Ref<boolean>>
   /** Submit handler for FormData (use with @submit.prevent) */
   formAction: (formData: FormData) => Promise<void>
   /** Bind to <form> for progressive enhancement */
-  formProps: globalThis.ComputedRef<{ action: string, method: string }>
+  formProps: ComputedRef<{ action: string, method: string }>
 }
 
 // ── Rate Limiting Middleware ─────────────────────────────────────
@@ -428,12 +430,12 @@ export interface UseStreamActionQueryOptions<TChunk = unknown> {
 export interface UseStreamActionQueryReturn<TInput, TChunk> {
   execute: (input: TInput) => Promise<void>
   stop: () => void
-  chunks: Readonly<globalThis.Ref<TChunk[]>>
-  data: Readonly<globalThis.Ref<TChunk | null>>
-  status: Readonly<globalThis.Ref<StreamStatus>>
-  error: Readonly<globalThis.Ref<ActionError | null>>
+  chunks: Readonly<Ref<TChunk[]>>
+  data: Readonly<Ref<TChunk | null>>
+  status: Readonly<Ref<StreamStatus>>
+  error: Readonly<Ref<ActionError | null>>
   /** Whether the result was served from cache */
-  fromCache: Readonly<globalThis.Ref<boolean>>
+  fromCache: Readonly<Ref<boolean>>
   /** Clear the cached stream result */
   clearCache: () => void
 }
