@@ -1,5 +1,5 @@
-import { defineEventHandler, readBody, getQuery, getHeader } from 'h3'
-import type { H3Event } from 'h3'
+import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from 'h3'
+import type { H3Event, MultiPartData } from 'h3'
 import type {
   StandardSchemaV1,
   InferOutput,
@@ -224,11 +224,43 @@ export function createActionError(opts: {
 
 // ── Internal helpers ──────────────────────────────────────────────
 
+export function foldMultipartData(parts: MultiPartData[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const part of parts) {
+    if (!part.name) continue
+    const value = part.filename !== undefined
+      ? { filename: part.filename, type: part.type ?? 'application/octet-stream', data: part.data }
+      : part.data.toString('utf-8')
+    if (part.name in out) {
+      const existing = out[part.name]
+      out[part.name] = Array.isArray(existing) ? [...existing, value] : [existing, value]
+    }
+    else {
+      out[part.name] = value
+    }
+  }
+  return out
+}
+
 async function parseInput(event: H3Event): Promise<unknown> {
   const method = event.method.toUpperCase()
 
   if (method === 'GET' || method === 'HEAD') {
     return getQuery(event)
+  }
+
+  if ((getHeader(event, 'content-type') ?? '').includes('multipart/form-data')) {
+    try {
+      const parts = await readMultipartFormData(event)
+      return foldMultipartData(parts ?? [])
+    }
+    catch {
+      throw createActionError({
+        code: 'PARSE_ERROR',
+        message: 'Invalid multipart form data',
+        statusCode: 400,
+      })
+    }
   }
 
   try {
