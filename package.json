@@ -1,6 +1,6 @@
 {
   "name": "nuxt-actions",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Type-safe server actions for Nuxt with Standard Schema validation (Zod, Valibot, ArkType), middleware, builder pattern, optimistic updates, SSR queries, streaming, and retry/dedupe",
   "repository": {
     "type": "git",
@@ -46,8 +46,12 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
+  "bin": {
+    "nuxt-actions": "./bin/nuxt-actions.mjs"
+  },
   "packageManager": "pnpm@10.27.0",
   "scripts": {
     "prepack": "nuxt-module-build build",
@@ -85,22 +89,22 @@
     }
   },
   "devDependencies": {
-    "@nuxt/devtools": "^3.2.1",
-    "@nuxt/eslint-config": "^1.15.1",
+    "@nuxt/devtools": "^3.2.4",
+    "@nuxt/eslint-config": "^1.15.2",
     "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/schema": "^4.3.1",
-    "@nuxt/test-utils": "^4.0.0",
+    "@nuxt/schema": "^4.4.8",
+    "@nuxt/test-utils": "^4.0.3",
     "@types/node": "latest",
-    "@vitest/coverage-v8": "^4.0.18",
-    "arktype": "^2.1.29",
+    "@vitest/coverage-v8": "^4.1.8",
+    "arktype": "^2.2.0",
     "changelogen": "^0.6.2",
-    "eslint": "^10.0.0",
-    "nuxt": "^4.3.1",
+    "eslint": "^10.4.1",
+    "nuxt": "^4.4.8",
     "typescript": "~5.9.3",
-    "valibot": "^1.2.0",
+    "valibot": "^1.4.1",
     "vitepress": "^1.6.4",
-    "vitest": "^4.0.18",
-    "vue-tsc": "^3.2.4",
-    "zod": "^4.3.6"
+    "vitest": "^4.1.8",
+    "vue-tsc": "^3.3.4",
+    "zod": "^4.4.3"
   }
 }

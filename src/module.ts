@@ -11,12 +11,33 @@ import {
 } from '@nuxt/kit'
 import { setupDevtools } from './devtools'
 
+export interface OpenApiOptions {
+  /**
+   * Path that serves the OpenAPI JSON.
+   * @default '/_actions/openapi.json'
+   */
+  path?: string
+  /**
+   * Serve Swagger UI. true uses '/_actions/openapi'; a string sets a custom path.
+   * @default false
+   */
+  ui?: boolean | string
+  /** OpenAPI info block */
+  info?: { title?: string, version?: string, description?: string }
+}
+
 export interface ModuleOptions {
   /**
    * Enable or disable the module
    * @default true
    */
   enabled?: boolean
+
+  /**
+   * Generate an OpenAPI document from actions. false to disable.
+   * @default false
+   */
+  openapi?: boolean | OpenApiOptions
 
   /**
    * Directory name for action files (relative to server/)
@@ -72,8 +93,8 @@ function parseMethodSuffix(fileName: string): { baseName: string, method: string
   // Check for method suffix
   const parts = withoutExt.split('.')
   if (parts.length >= 2) {
-    const suffix = parts[parts.length - 1].toLowerCase()
-    if ((METHOD_SUFFIXES as readonly string[]).includes(suffix)) {
+    const suffix = parts[parts.length - 1]?.toLowerCase()
+    if (suffix && (METHOD_SUFFIXES as readonly string[]).includes(suffix)) {
       return {
         baseName: parts.slice(0, -1).join('.'),
         method: suffix.toUpperCase(),
@@ -140,21 +161,40 @@ function generateHandlerCode(action: ScannedAction): string {
   // Safely escape the import path using JSON.stringify
   const importPath = JSON.stringify(action.filePath.split('\\').join('/'))
   return [
-    `import { defineEventHandler, readBody, getQuery, getHeader } from 'h3'`,
+    `import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from 'h3'`,
     `import actionModule from ${importPath}`,
+    ``,
+    `function _foldMultipart(parts) {`,
+    `  const out = {}`,
+    `  for (const p of parts) {`,
+    `    if (!p.name) continue`,
+    `    const v = p.filename !== undefined ? { filename: p.filename, type: p.type || 'application/octet-stream', data: p.data } : p.data.toString('utf-8')`,
+    `    if (p.name in out) { out[p.name] = Array.isArray(out[p.name]) ? [...out[p.name], v] : [out[p.name], v] }`,
+    `    else { out[p.name] = v }`,
+    `  }`,
+    `  return out`,
+    `}`,
     ``,
     `export default defineEventHandler(async (event) => {`,
     `  if (typeof actionModule._execute === 'function') {`,
     `    let rawInput`,
     `    try {`,
     `      const method = event.method.toUpperCase()`,
-    `      rawInput = (method === 'GET' || method === 'HEAD')`,
-    `        ? getQuery(event)`,
-    `        : (await readBody(event) ?? {})`,
+    `      const ct = getHeader(event, 'content-type') || ''`,
+    `      if (method === 'GET' || method === 'HEAD') {`,
+    `        rawInput = getQuery(event)`,
+    `      } else if (ct.includes('multipart/form-data')) {`,
+    `        rawInput = _foldMultipart((await readMultipartFormData(event)) || [])`,
+    `      } else {`,
+    `        rawInput = (await readBody(event) ?? {})`,
+    `      }`,
     `    } catch (parseError) {`,
     `      const ct = getHeader(event, 'content-type') || ''`,
     `      if (ct.includes('application/json')) {`,
     `        return { success: false, error: { code: 'PARSE_ERROR', message: 'Invalid JSON in request body', statusCode: 400 } }`,
+    `      }`,
+    `      if (ct.includes('multipart/form-data')) {`,
+    `        return { success: false, error: { code: 'PARSE_ERROR', message: 'Invalid multipart form data', statusCode: 400 } }`,
     `      }`,
     `      rawInput = {}`,
     `    }`,
@@ -279,9 +319,33 @@ export default defineNuxtModule<ModuleOptions>({
           nitroConfig.virtual[virtualId] = () => generateHandlerCode(action)
           nitroConfig.handlers.push({
             route: `/api/_actions/${action.path}`,
-            method: action.method.toLowerCase(),
+            method: action.method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head' | 'connect' | 'options' | 'trace',
             handler: virtualId,
           })
+        }
+      })
+    }
+
+    // ── OpenAPI document + Swagger UI ──────────────────────────
+    if (options.openapi) {
+      const openapi = options.openapi === true ? {} : options.openapi
+      const jsonPath = openapi.path ?? '/_actions/openapi.json'
+      const uiPath = openapi.ui === true ? '/_actions/openapi' : (typeof openapi.ui === 'string' ? openapi.ui : undefined)
+      const info = {
+        title: openapi.info?.title ?? 'nuxt-actions API',
+        version: openapi.info?.version ?? '1.0.0',
+        ...(openapi.info?.description ? { description: openapi.info.description } : {}),
+      }
+      const swaggerHtml = uiPath ? buildSwaggerHtml(jsonPath) : ''
+      const jsonHandler = resolver.resolve('./runtime/server/openapi-json')
+      const uiHandler = resolver.resolve('./runtime/server/openapi-ui')
+      nuxt.hook('nitro:config', (nitroConfig) => {
+        nitroConfig.virtual = nitroConfig.virtual || {}
+        nitroConfig.handlers = nitroConfig.handlers || []
+        nitroConfig.virtual['#actions-openapi-registry'] = () => generateOpenApiRegistry(scannedActions, info, swaggerHtml)
+        nitroConfig.handlers.push({ route: jsonPath, method: 'get', handler: jsonHandler })
+        if (uiPath) {
+          nitroConfig.handlers.push({ route: uiPath, method: 'get', handler: uiHandler })
         }
       })
     }
@@ -371,8 +435,6 @@ function generateActionsTemplate(
 
   const lines: string[] = [
     '// Auto-generated by nuxt-actions — do not edit',
-    `import type { TypedActionReference } from 'nuxt-actions/dist/runtime/types'`,
-    '',
   ]
 
   // Import types from each action file
@@ -381,7 +443,15 @@ function generateActionsTemplate(
     lines.push(`import type _action_${action.name} from '${importPath}'`)
   }
 
-  lines.push('')
+  lines.push(
+    '',
+    'interface TypedActionReference<TInput = unknown, TOutput = unknown> {',
+    '  readonly __actionPath: string',
+    '  readonly __actionMethod: string',
+    '  readonly _types: { readonly input: TInput, readonly output: TOutput }',
+    '}',
+    '',
+  )
 
   // Export typed references
   for (const action of actions) {
@@ -399,6 +469,41 @@ function generateActionsTemplate(
   }
 
   return lines.join('\n')
+}
+
+const SWAGGER_VERSION = '5.32.6'
+const SWAGGER_CSS_SRI = 'sha384-9Q2fpS+xeS4ffJy6CagnwoUl+4ldAYhOs9pgZuEKxypVModhmZFzeMlvVsAjf7uT'
+const SWAGGER_JS_SRI = 'sha384-EYdOaiRwn44zNjrw+Tfs06qYz9BGQVo2f4/pLY5i7VorbjnZNhdplAbTBk8FXHUJ'
+
+function generateOpenApiRegistry(
+  actions: ScannedAction[],
+  info: { title: string, version: string, description?: string },
+  swaggerHtml: string,
+): string {
+  const lines: string[] = ['// Auto-generated by nuxt-actions']
+  actions.forEach((action, i) => {
+    const importPath = JSON.stringify(action.filePath.split('\\').join('/'))
+    lines.push(`import _action_${i} from ${importPath}`)
+  })
+  const entries = actions.map((a, i) =>
+    `{ name: '${a.name}', path: '${a.path}', method: '${a.method}', action: _action_${i} }`,
+  )
+  lines.push(`export const actions = [${entries.join(', ')}]`)
+  lines.push(`export const info = ${JSON.stringify(info)}`)
+  lines.push(`export const swaggerHtml = ${JSON.stringify(swaggerHtml)}`)
+  return lines.join('\n')
+}
+
+function buildSwaggerHtml(jsonPath: string): string {
+  const css = `https://unpkg.com/swagger-ui-dist@${SWAGGER_VERSION}/swagger-ui.css`
+  const js = `https://unpkg.com/swagger-ui-dist@${SWAGGER_VERSION}/swagger-ui-bundle.js`
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>nuxt-actions API</title>`
+    + `<link rel="stylesheet" href="${css}" integrity="${SWAGGER_CSS_SRI}" crossorigin="anonymous"></head>`
+    + `<body><div id="swagger-ui"></div>`
+    + `<script src="${js}" integrity="${SWAGGER_JS_SRI}" crossorigin="anonymous"></script>`
+    + `<script>window.onload=()=>{window.ui=SwaggerUIBundle({url:'${jsonPath}',dom_id:'#swagger-ui'})}</script>`
+    + `</body></html>`
+  return html
 }
 
 /**

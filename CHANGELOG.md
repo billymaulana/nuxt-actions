@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.2.0 (2026-06-10)
+
+### Bug Fixes
+
+- Generated `#actions` module no longer imports `nuxt-actions/dist/runtime/types` (an unexported subpath that broke consumer typechecking under modern module resolution); `TypedActionReference` is now inlined into the generated file, making it self-contained.
+- `invalidateActions()` now resolves matching query keys and passes them to `refreshNuxtData` as an array — the previous predicate form was a no-op because `refreshNuxtData` only accepts `string | string[]`.
+- Internal types now import `Ref`/`ComputedRef` from `vue` instead of relying on the ambient `globalThis.Ref`, so the package typechecks standalone.
+- `useActionQuery`/`useInfiniteActionQuery` omit the `watch` option when no input is given instead of passing the invalid `watch: false`.
+- Various internal type-soundness fixes across `defineAction`, `useAction`, `useActions`, `useActionState`, `useStreamActionQuery`, and the DevTools tab registration.
+
+### Features
+
+- **Smart cache invalidation** — `useActionMutation` auto-refetches affected queries after a successful mutation, targeting typed action references and/or string tags. Adds `invalidateTags()`, array support in `invalidateActions()`, and a `tags` option on `useActionQuery`.
+- **CLI scaffolding** — `npx nuxt-actions add <name>` generates a typed action file (`--method`, `--dir`, `--schema`).
+- **DevTools** — the actions tab lists each endpoint with a ready-to-copy curl snippet and an "Open docs" link.
+- **OpenAPI** — generate an OpenAPI 3.1 document (and optional Swagger UI) from your actions via the `openapi` module option. Precise bodies for arktype and Zod 4; graceful fallback otherwise.
+- **File uploads** — `multipart/form-data` requests are parsed into typed `ActionFile` fields.
+- **Auth preset** — `defineAuthMiddleware` resolves the current user into `ctx.user` or rejects with 401.
+- `useOptimisticAction` accepts a distinct `TData` for `currentData`/`updateFn`/`optimisticData`, so the optimistic source can be a collection different from the action output (e.g. optimistically updating a list).
+- `ActionMiddleware` may return `void` (for the chain-skip pattern where a middleware does not call `next()`).
+
 ## v1.1.0 (2026-03-21)
 
 ### Bug Fixes

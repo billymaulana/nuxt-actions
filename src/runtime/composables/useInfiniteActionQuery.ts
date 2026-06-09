@@ -1,5 +1,5 @@
+import type { Ref, MaybeRefOrGetter } from 'vue'
 import { ref, computed, readonly, toValue, watch, onScopeDispose } from 'vue'
-import type { MaybeRefOrGetter } from 'vue'
 import { useAsyncData, useNuxtApp } from '#app'
 import type {
   ActionError,
@@ -126,7 +126,7 @@ export function useInfiniteActionQuery(
       server: options.server ?? true,
       lazy: options.lazy ?? false,
       immediate: isEnabled.value,
-      watch: input !== undefined ? [() => toValue(input)] : false,
+      watch: input !== undefined ? [() => toValue(input)] : undefined,
     },
   )
 
@@ -214,12 +214,12 @@ export function useInfiniteActionQuery(
   })
 
   return {
-    pages: readonly(pages) as Readonly<globalThis.Ref<unknown[]>>,
+    pages: readonly(pages) as Readonly<Ref<unknown[]>>,
     data,
-    error: readonly(error) as Readonly<globalThis.Ref<ActionError | null>>,
+    error: readonly(error) as Readonly<Ref<ActionError | null>>,
     status: asyncData.status,
     pending: asyncData.pending,
-    isFetchingNextPage: readonly(isFetchingNextPage) as Readonly<globalThis.Ref<boolean>>,
+    isFetchingNextPage: readonly(isFetchingNextPage) as Readonly<Ref<boolean>>,
     hasNextPage,
     fetchNextPage,
     refresh,

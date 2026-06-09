@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { ref, computed, readonly } from 'vue'
 import { useNuxtApp } from '#app'
 import type {
@@ -93,7 +94,7 @@ export function useActions(
     if (options.mode === 'sequential') {
       settled = []
       for (let i = 0; i < actions.length; i++) {
-        const result = await executeSingle(actions[i], inputs[i])
+        const result = await executeSingle(actions[i]!, inputs[i])
         settled.push(result)
       }
     }
@@ -121,9 +122,9 @@ export function useActions(
 
   return {
     execute,
-    pending: readonly(pending) as Readonly<globalThis.Ref<boolean>>,
-    results: readonly(results) as Readonly<globalThis.Ref<(ActionResult<unknown> | null)[]>>,
-    errors: readonly(errors) as Readonly<globalThis.Ref<(ActionError | null)[]>>,
+    pending: readonly(pending) as Readonly<Ref<boolean>>,
+    results: readonly(results) as Readonly<Ref<(ActionResult<unknown> | null)[]>>,
+    errors: readonly(errors) as Readonly<Ref<(ActionError | null)[]>>,
     hasErrors,
   }
 }

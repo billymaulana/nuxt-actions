@@ -4,37 +4,47 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // Mock #app
 const mockRefreshNuxtData = vi.fn().mockResolvedValue(undefined)
 const mockClearNuxtData = vi.fn()
+let asyncData: Record<string, unknown> = {}
 
 vi.mock('#app', () => ({
   refreshNuxtData: (...args: unknown[]) => mockRefreshNuxtData(...args),
   clearNuxtData: (...args: unknown[]) => mockClearNuxtData(...args),
+  useNuxtApp: () => ({ _asyncData: asyncData }),
 }))
 
 describe('invalidateActions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    asyncData = {
+      'action:/api/todos:{"q":"test"}': {},
+      'action:/api/todos:{}': {},
+      'action:/api/users:{}': {},
+      'action:/api/_actions/list-todos:{"q":"test"}': {},
+      'action:/api/_actions/other:{}': {},
+      'some-other-key': {},
+    }
   })
 
   it('invalidates all action queries when called without arguments', async () => {
     await invalidateActions()
 
     expect(mockRefreshNuxtData).toHaveBeenCalledOnce()
-    const predicate = mockRefreshNuxtData.mock.calls[0][0] as (key: string) => boolean
+    const keys = mockRefreshNuxtData.mock.calls[0][0] as string[]
 
-    expect(predicate('action:/api/todos:{"q":"test"}')).toBe(true)
-    expect(predicate('action:/api/users:{}')).toBe(true)
-    expect(predicate('some-other-key')).toBe(false)
+    expect(keys).toContain('action:/api/todos:{"q":"test"}')
+    expect(keys).toContain('action:/api/users:{}')
+    expect(keys).not.toContain('some-other-key')
   })
 
   it('invalidates specific action by string path', async () => {
     await invalidateActions('/api/todos')
 
     expect(mockRefreshNuxtData).toHaveBeenCalledOnce()
-    const predicate = mockRefreshNuxtData.mock.calls[0][0] as (key: string) => boolean
+    const keys = mockRefreshNuxtData.mock.calls[0][0] as string[]
 
-    expect(predicate('action:/api/todos:{"q":"test"}')).toBe(true)
-    expect(predicate('action:/api/todos:{}')).toBe(true)
-    expect(predicate('action:/api/users:{}')).toBe(false)
+    expect(keys).toContain('action:/api/todos:{"q":"test"}')
+    expect(keys).toContain('action:/api/todos:{}')
+    expect(keys).not.toContain('action:/api/users:{}')
   })
 
   it('invalidates specific action by typed reference', async () => {
@@ -47,27 +57,18 @@ describe('invalidateActions', () => {
     await invalidateActions(actionRef as never)
 
     expect(mockRefreshNuxtData).toHaveBeenCalledOnce()
-    const predicate = mockRefreshNuxtData.mock.calls[0][0] as (key: string) => boolean
+    const keys = mockRefreshNuxtData.mock.calls[0][0] as string[]
 
-    expect(predicate('action:/api/_actions/list-todos:{"q":"test"}')).toBe(true)
-    expect(predicate('action:/api/_actions/other:{}')).toBe(false)
+    expect(keys).toContain('action:/api/_actions/list-todos:{"q":"test"}')
+    expect(keys).not.toContain('action:/api/_actions/other:{}')
   })
 
-  it('handles non-string keys gracefully', async () => {
-    await invalidateActions()
+  it('does not call refreshNuxtData when no keys match', async () => {
+    asyncData = { 'some-other-key': {} }
 
-    const predicate = mockRefreshNuxtData.mock.calls[0][0] as (key: unknown) => boolean
-    expect(predicate(123)).toBe(false)
-    expect(predicate(null)).toBe(false)
-    expect(predicate(undefined)).toBe(false)
-  })
+    await invalidateActions('/api/nonexistent')
 
-  it('handles non-string keys gracefully when filtering by path', async () => {
-    await invalidateActions('/api/todos')
-
-    const predicate = mockRefreshNuxtData.mock.calls[0][0] as (key: unknown) => boolean
-    expect(predicate(123)).toBe(false)
-    expect(predicate(null)).toBe(false)
+    expect(mockRefreshNuxtData).not.toHaveBeenCalled()
   })
 })
 

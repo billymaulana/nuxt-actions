@@ -11,6 +11,7 @@ import type {
   UseActionQueryReturn,
 } from '../types'
 import { stableStringify } from './_utils'
+import { registerTags } from './_tagRegistry'
 
 /**
  * Composable for SSR-capable GET action queries with caching and reactive re-fetching.
@@ -86,6 +87,10 @@ export function useActionQuery(
   // for Nuxt 3.x compatibility (getter keys require Nuxt 3.14+)
   const key = `action:${path}:${stableStringify(toValue(input) ?? {})}`
 
+  if (options.tags?.length) {
+    registerTags(key, options.tags)
+  }
+
   const isBodyMethod = method === 'POST' || method === 'PUT' || method === 'PATCH'
 
   // ── Enabled flag ────────────────────────────────────────────────
@@ -113,7 +118,7 @@ export function useActionQuery(
       server: options.server ?? true,
       lazy: options.lazy ?? false,
       immediate: (options.immediate ?? true) && isEnabled.value,
-      watch: input !== undefined ? [() => toValue(input)] : false,
+      watch: input !== undefined ? [() => toValue(input)] : undefined,
     },
   )
 

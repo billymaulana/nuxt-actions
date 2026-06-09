@@ -10,6 +10,8 @@ vi.mock('h3', () => ({
   defineEventHandler: (handler: (event: unknown) => unknown) => handler,
   readBody: vi.fn(),
   getQuery: vi.fn(),
+  getHeader: vi.fn(() => ''),
+  readMultipartFormData: vi.fn(),
 }))
 
 function createMockEvent(method = 'POST'): { method: string, path: string } {

@@ -8,26 +8,23 @@ See `useAction` with CRUD operations in the [example /actions page](https://gith
 
 ## Basic Usage
 
-Pass the API route path and optional configuration. The composable returns reactive refs and execution functions immediately -- no request is made until you call `execute` or `executeAsync`.
+Import a typed action reference from `#actions` and pass it to `useAction`. Input and output types are inferred end-to-end from the server action — no manual generics, and the HTTP method comes from the action itself. The composable returns reactive refs and execution functions immediately -- no request is made until you call `execute` or `executeAsync`.
 
 ```vue
 <script setup lang="ts">
-const { execute, data, error, status } = useAction<
-  { title: string },
-  { id: number; title: string; done: boolean }
->('/api/todos', {
-  method: 'POST',
-})
+import { createTodo } from '#actions'
+
+const { execute, data, error, status } = useAction(createTodo)
 
 const title = ref('')
 
-async function createTodo() {
+async function addTodo() {
   await execute({ title: title.value })
 }
 </script>
 
 <template>
-  <form @submit.prevent="createTodo">
+  <form @submit.prevent="addTodo">
     <input v-model="title" placeholder="What needs to be done?" />
     <button :disabled="status === 'executing'">Add</button>
   </form>
@@ -37,9 +34,9 @@ async function createTodo() {
 </template>
 ```
 
-## TypeScript Generics
+## TypeScript Generics (string-path fallback)
 
-`useAction` accepts two type parameters:
+For internal actions, prefer the typed reference from `#actions` shown above — types are inferred with zero generics. When you call a plain string path (an external endpoint, or an action you don't import a reference for), `useAction` accepts two type parameters as a fallback:
 
 ```ts
 useAction<TInput, TOutput>(path, options?)
