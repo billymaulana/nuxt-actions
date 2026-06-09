@@ -11,4 +11,8 @@ export default defineNuxtConfig({
     },
   },
   compatibilityDate: 'latest',
+
+  actions: {
+    openapi: { ui: true },
+  },
 })

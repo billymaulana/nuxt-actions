@@ -68,6 +68,7 @@ export default defineConfig({
             { text: 'Security', link: '/guide/security' },
             { text: 'Colocation', link: '/guide/colocation' },
             { text: 'CLI Scaffolding', link: '/guide/cli' },
+            { text: 'OpenAPI & Swagger UI', link: '/guide/openapi' },
           ],
         },
       ],
