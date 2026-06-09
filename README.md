@@ -37,6 +37,7 @@ Works with <strong>Zod</strong>, <strong>Valibot</strong>, <strong>ArkType</stro
 - **Builder Pattern** - `createActionClient()` for composing actions with shared middleware
 - **Optimistic Updates** - `useOptimisticAction` with race-safe rollback
 - **SSR Queries** - `useActionQuery` wraps `useAsyncData` for SSR, caching, and reactive re-fetching
+- **Smart Cache** - `useActionMutation` auto-refetches affected queries via typed references or tags (`invalidateTags`)
 - **Streaming Actions** - `defineStreamAction` + `useStreamAction` for real-time AI/streaming use cases
 - **Retry/Backoff** - Native ofetch retry with `retry: true | number | { count, delay, statusCodes }`
 - **Request Deduplication** - `dedupe: 'cancel' | 'defer'` to prevent duplicate requests

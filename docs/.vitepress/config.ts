@@ -54,6 +54,7 @@ export default defineConfig({
             { text: 'Optimistic Updates', link: '/guide/optimistic-updates' },
             { text: 'SSR Queries', link: '/guide/action-queries' },
             { text: 'Infinite Queries', link: '/guide/infinite-queries' },
+            { text: 'Cache Invalidation', link: '/guide/cache-invalidation' },
             { text: 'Streaming', link: '/guide/streaming' },
             { text: 'Batch Actions', link: '/guide/batch-actions' },
           ],
