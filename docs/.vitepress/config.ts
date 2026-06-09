@@ -67,6 +67,7 @@ export default defineConfig({
             { text: 'Output Validation', link: '/guide/output-validation' },
             { text: 'Security', link: '/guide/security' },
             { text: 'Colocation', link: '/guide/colocation' },
+            { text: 'CLI Scaffolding', link: '/guide/cli' },
           ],
         },
       ],

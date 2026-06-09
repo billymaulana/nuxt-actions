@@ -42,6 +42,7 @@ Works with <strong>Zod</strong>, <strong>Valibot</strong>, <strong>ArkType</stro
 - **Retry/Backoff** - Native ofetch retry with `retry: true | number | { count, delay, statusCodes }`
 - **Request Deduplication** - `dedupe: 'cancel' | 'defer'` to prevent duplicate requests
 - **Custom Headers** - Per-request auth tokens via static headers or function
+- **CLI Scaffold** - `npx nuxt-actions add <name>` generates a typed action file
 - **HMR Type Updates** - Action file changes update types without restarting dev server
 - **DevTools Tab** - Nuxt DevTools integration showing registered actions
 - **Security Hardened** - Prototype pollution protection, error message sanitization, double `next()` prevention
