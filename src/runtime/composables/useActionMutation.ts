@@ -39,7 +39,7 @@ export function useActionMutation(
   pathOrAction: string | TypedActionReference,
   options: UseActionMutationOptions<unknown, unknown> = {},
 ): UseActionReturn<unknown, unknown> {
-  const base = useAction(pathOrAction as never, options as never) as UseActionReturn<unknown, unknown>
+  const base = useAction(pathOrAction as never, options as never) as unknown as UseActionReturn<unknown, unknown>
 
   const targets = options.invalidates ?? []
   const refs = targets.filter((t): t is TypedActionReference => typeof t === 'object')
