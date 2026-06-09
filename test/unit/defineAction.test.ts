@@ -1,5 +1,6 @@
 import { readBody, getQuery, getHeader } from 'h3'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { z } from 'zod'
 import { defineAction, createActionError, formatStandardIssues } from '../../src/runtime/server/utils/defineAction'
 import type { StandardSchemaV1 } from '../../src/runtime/types'
 
@@ -1267,5 +1268,18 @@ describe('middleware next() warning', () => {
     expect(warnSpy).not.toHaveBeenCalled()
 
     warnSpy.mockRestore()
+  })
+})
+
+describe('defineAction schema exposure', () => {
+  it('attaches _input and _outputSchema for introspection', () => {
+    const input = z.object({ title: z.string() })
+    const outputSchema = z.object({ id: z.number() })
+    const action = defineAction({ input, outputSchema, handler: async () => ({ id: 1 }) }) as unknown as {
+      _input: unknown
+      _outputSchema: unknown
+    }
+    expect(action._input).toBe(input)
+    expect(action._outputSchema).toBe(outputSchema)
   })
 })

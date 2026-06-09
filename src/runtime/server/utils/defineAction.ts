@@ -194,6 +194,8 @@ export function defineAction<
   // Attach _execute and phantom _types for virtual module generation
   return Object.assign(handler, {
     _execute,
+    _input: options.input,
+    _outputSchema: options.outputSchema,
     _types: {} as {
       readonly input: TInput
       readonly output: TOutput
