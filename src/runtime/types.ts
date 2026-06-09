@@ -117,6 +117,19 @@ export interface ActionOptions<
   handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>
 }
 
+export interface ActionFile {
+  filename: string
+  type: string
+  data: Buffer
+}
+
+export interface AuthMiddlewareOptions {
+  /** Allow anonymous access; ctx.user will be null. Default: false */
+  optional?: boolean
+  /** Error message when authentication is required. */
+  message?: string
+}
+
 // ── Builder Pattern Types ─────────────────────────────────────────
 
 export interface ActionClient<TCtx = Record<string, never>> {
