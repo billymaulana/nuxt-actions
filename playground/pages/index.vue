@@ -54,6 +54,21 @@ const pages = [
     description: 'Authentication flow with chained middleware, validation, and error handling.',
   },
   {
+    path: '/cache',
+    title: 'Smart Cache',
+    description: 'useActionMutation auto-refetches tagged queries after a successful mutation.',
+  },
+  {
+    path: '/upload',
+    title: 'File Uploads',
+    description: 'Multipart upload parsed into typed ActionFile fields on the server.',
+  },
+  {
+    path: '/auth',
+    title: 'Auth Preset',
+    description: 'defineAuthMiddleware resolves ctx.user from a request header or returns 401.',
+  },
+  {
     path: '/advanced',
     title: 'Advanced Features',
     description: 'Retry, timeout, custom headers, dedupe, throttle, output validation, and executeAsync.',
