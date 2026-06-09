@@ -37,9 +37,9 @@
         v-if="loginAction.hasSucceeded.value"
         class="success"
       >
-        <p>Welcome, {{ loginAction.data.value.user.name }}!</p>
+        <p>Welcome, {{ loginAction.data.value?.user.name }}!</p>
         <p style="font-size: 13px; color: #4ade80; opacity: 0.7; margin-top: 4px;">
-          Token: {{ loginAction.data.value.token }}
+          Token: {{ loginAction.data.value?.token }}
         </p>
       </div>
     </section>

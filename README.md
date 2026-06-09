@@ -37,10 +37,15 @@ Works with <strong>Zod</strong>, <strong>Valibot</strong>, <strong>ArkType</stro
 - **Builder Pattern** - `createActionClient()` for composing actions with shared middleware
 - **Optimistic Updates** - `useOptimisticAction` with race-safe rollback
 - **SSR Queries** - `useActionQuery` wraps `useAsyncData` for SSR, caching, and reactive re-fetching
+- **Smart Cache** - `useActionMutation` auto-refetches affected queries via typed references or tags (`invalidateTags`)
 - **Streaming Actions** - `defineStreamAction` + `useStreamAction` for real-time AI/streaming use cases
 - **Retry/Backoff** - Native ofetch retry with `retry: true | number | { count, delay, statusCodes }`
 - **Request Deduplication** - `dedupe: 'cancel' | 'defer'` to prevent duplicate requests
 - **Custom Headers** - Per-request auth tokens via static headers or function
+- **CLI Scaffold** - `npx nuxt-actions add <name>` generates a typed action file
+- **OpenAPI** - generate an OpenAPI 3.1 document + Swagger UI from your actions
+- **File Uploads** - multipart actions parse files into typed `ActionFile` fields
+- **Auth Preset** - `defineAuthMiddleware` populates `ctx.user` or rejects with 401
 - **HMR Type Updates** - Action file changes update types without restarting dev server
 - **DevTools Tab** - Nuxt DevTools integration showing registered actions
 - **Security Hardened** - Prototype pollution protection, error message sanitization, double `next()` prevention
@@ -173,11 +178,11 @@ Call server actions from Vue components with reactive state:
 
 ```vue
 <script setup lang="ts">
-const { execute, executeAsync, data, error, status, reset } = useAction<
-  { title: string },
-  { id: number; title: string }
->('/api/todos', {
-  method: 'POST',
+import { createTodo } from '#actions'
+
+// Input and output types are inferred end-to-end from the server action.
+// No manual generics, no method to specify — both come from `createTodo`.
+const { execute, executeAsync, data, error, status, reset } = useAction(createTodo, {
   onExecute(input) {
     console.log('Sending:', input)
   },
@@ -215,6 +220,8 @@ async function handleSubmitAsync(title: string) {
   </form>
 </template>
 ```
+
+> **Calling external or string-path endpoints?** `useAction` also accepts a plain path with explicit generics as a fallback — `useAction<TInput, TOutput>('/api/todos', { method: 'POST' })`. Prefer the typed reference from `#actions` for internal actions so types stay inferred automatically.
 
 ### Optimistic Updates: `useOptimisticAction`
 
@@ -361,7 +368,9 @@ Define a typed middleware function. `createMiddleware` is an alias that signals 
 
 ### Client Composables
 
-#### `useAction<TInput, TOutput>(path, options?)`
+#### `useAction(action, options?)` / `useAction<TInput, TOutput>(path, options?)`
+
+Two overloads: pass a typed reference from `#actions` for end-to-end inferred input/output (recommended), or a string path with explicit generics for external/untyped endpoints.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -374,7 +383,9 @@ Define a typed middleware function. `createMiddleware` is an alias that signals 
 | `onError` | `(error) => void` | - | Error callback |
 | `onSettled` | `(result) => void` | - | Settled callback |
 
-**Returns:** `{ execute, executeAsync, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
+Returns:
+
+`{ execute, executeAsync, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
 
 #### `useOptimisticAction<TInput, TOutput>(path, options)`
 
@@ -386,7 +397,9 @@ Define a typed middleware function. `createMiddleware` is an alias that signals 
 | `currentData` | `Ref<TOutput>` | Source of truth data ref |
 | `updateFn` | `(input, current) => TOutput` | Optimistic update function |
 
-**Returns:** `{ execute, optimisticData, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
+Returns:
+
+`{ execute, optimisticData, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
 
 #### `useActionQuery(action, input?, options?)`
 
@@ -399,7 +412,9 @@ SSR-capable GET action query wrapping `useAsyncData`:
 | `immediate` | `boolean` | `true` | Execute immediately |
 | `default` | `() => T` | - | Default value factory |
 
-**Returns:** `{ data, error, status, pending, refresh, clear }`
+Returns:
+
+`{ data, error, status, pending, refresh, clear }`
 
 #### `useStreamAction(action, options?)`
 
@@ -411,7 +426,9 @@ Client composable for streaming server actions:
 | `onDone` | `(allChunks) => void` | Called when stream completes |
 | `onError` | `(error) => void` | Called on error |
 
-**Returns:** `{ execute, stop, chunks, data, status, error }`
+Returns:
+
+`{ execute, stop, chunks, data, status, error }`
 
 #### `defineStreamAction(options)`
 
@@ -441,7 +458,7 @@ Server-side streaming action with SSE:
 <tr><td>SSR queries</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#10060;</td></tr>
 <tr><td>Streaming actions (SSE)</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
 <tr><td>Retry / backoff</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-<tr><td>Request deduplication</td><td align="center">&#9989;</td><td align="center">&#11093;</td><td align="center">&#10060;</td></tr>
+<tr><td>Request deduplication</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
 <tr><td>Output schema validation</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#9989;</td></tr>
 <tr><td>DevTools integration</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
 <tr><td>HMR type updates</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#10060;</td></tr>

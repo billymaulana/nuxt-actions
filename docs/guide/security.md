@@ -4,30 +4,30 @@ Best practices for securing your server actions in production.
 
 ## CSRF Protection
 
-Server actions are executed via standard HTTP requests (`POST`, `GET`, etc.) to `/api/_actions/*` endpoints. Nuxt does **not** include built-in CSRF protection — you must implement it yourself or use a module like [`nuxt-security`](https://nuxt-security.vercel.app/).
-
-To add CSRF protection, use an action middleware that validates the request origin:
+nuxt-actions provides a built-in `csrfMiddleware()` for CSRF token protection on mutation actions:
 
 ```ts
-// server/actions/_middleware.ts — not auto-scanned (underscore prefix)
-import { getHeader } from 'h3'
+const protectedAction = createActionClient()
+  .use(csrfMiddleware())
+  .schema(z.object({ title: z.string() }))
+  .action(async ({ input }) => {
+    return db.createPost(input)
+  })
+```
 
-export const csrfMiddleware = defineMiddleware(async ({ event, next }) => {
-  // Verify the request came from your application
-  const origin = getHeader(event, 'origin')
-  const host = getHeader(event, 'host')
+Custom configuration:
 
-  if (origin && host && !origin.includes(host)) {
-    throw createActionError({
-      code: 'CSRF_ERROR',
-      message: 'Invalid request origin',
-      statusCode: 403,
-    })
-  }
-
-  return next()
+```ts
+csrfMiddleware({
+  cookieName: '__csrf',        // Default: '_csrf'
+  headerName: 'x-xsrf-token', // Default: 'x-csrf-token'
+  tokenLength: 64,             // Default: 32
 })
 ```
+
+On safe requests (GET, HEAD), a token is set as an httpOnly cookie. On mutation requests (POST, PUT, PATCH, DELETE), the middleware validates that the token in the request header matches the cookie value.
+
+See the [csrfMiddleware API reference](/api/csrf-middleware) for full details.
 
 ## Authentication Middleware
 
@@ -119,33 +119,29 @@ export default defineAction({
 
 ## Rate Limiting
 
-Implement rate limiting to prevent abuse:
+Use the built-in `rateLimitMiddleware()` to prevent abuse:
 
 ```ts
-const rateLimitMap = new Map<string, { count: number, resetAt: number }>()
+const limitedAction = createActionClient()
+  .use(rateLimitMiddleware({ limit: 10, window: 60000 }))
+  .schema(z.object({ email: z.string() }))
+  .action(async ({ input }) => {
+    return db.findUser(input.email)
+  })
+```
 
-export const rateLimitMiddleware = defineMiddleware(async ({ event, next }) => {
-  const ip = getRequestIP(event) ?? 'unknown'
-  const now = Date.now()
-  const entry = rateLimitMap.get(ip)
+Custom key function:
 
-  if (entry && entry.resetAt > now && entry.count >= 100) {
-    throw createActionError({
-      code: 'RATE_LIMIT',
-      message: 'Too many requests',
-      statusCode: 429,
-    })
-  }
-
-  if (!entry || entry.resetAt <= now) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 })
-  } else {
-    entry.count++
-  }
-
-  return next()
+```ts
+rateLimitMiddleware({
+  limit: 100,
+  window: 60000,
+  keyFn: (event) => event.context.auth?.userId ?? getRequestIP(event) ?? 'unknown',
+  message: 'Rate limit exceeded. Please try again later.',
 })
 ```
+
+See the [rateLimitMiddleware API reference](/api/rate-limit-middleware) for full configuration options.
 
 ## Error Handling
 

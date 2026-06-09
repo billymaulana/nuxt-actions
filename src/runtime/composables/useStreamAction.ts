@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { shallowRef, ref, readonly, triggerRef, onScopeDispose } from 'vue'
 import { useNuxtApp, useRequestURL } from '#app'
 import type {
@@ -327,9 +328,9 @@ export function useStreamAction(
   return {
     execute,
     stop,
-    chunks: readonly(chunks) as Readonly<globalThis.Ref<unknown[]>>,
-    data: readonly(data) as Readonly<globalThis.Ref<unknown>>,
-    status: readonly(status) as Readonly<globalThis.Ref<StreamStatus>>,
-    error: readonly(error) as Readonly<globalThis.Ref<ActionError | null>>,
+    chunks: readonly(chunks) as Readonly<Ref<unknown[]>>,
+    data: readonly(data) as Readonly<Ref<unknown>>,
+    status: readonly(status) as Readonly<Ref<StreamStatus>>,
+    error: readonly(error) as Readonly<Ref<ActionError | null>>,
   }
 }

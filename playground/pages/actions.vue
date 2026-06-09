@@ -38,7 +38,7 @@
         v-if="createAction.hasSucceeded.value"
         class="success"
       >
-        Created: {{ createAction.data.value.title }} (id: {{ createAction.data.value.id }})
+        Created: {{ createAction.data.value?.title }} (id: {{ createAction.data.value?.id }})
       </div>
     </section>
 

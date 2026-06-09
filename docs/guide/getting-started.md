@@ -4,7 +4,7 @@ This guide walks you through installing `nuxt-actions`, creating your first type
 
 ## Prerequisites
 
-- Nuxt 3.0 or later (Nuxt 4 is fully supported)
+- Nuxt 3.7 or later (Nuxt 4 is fully supported)
 - Node.js 18+
 - One of the supported validation libraries (see below)
 
@@ -71,7 +71,7 @@ export default defineNuxtConfig({
 })
 ```
 
-That is all the configuration required. Every server utility (`defineAction`, `createActionClient`, `defineMiddleware`, `createMiddleware`, `createActionError`) is auto-imported in your `server/` directory, and every client composable (`useAction`, `useOptimisticAction`) is auto-imported in your Vue components and pages.
+That is all the configuration required. Every server utility and every client composable is auto-imported -- see the [full list below](#what-gets-auto-imported).
 
 ## Configuration
 
@@ -83,8 +83,9 @@ export default defineNuxtConfig({
   modules: ['nuxt-actions'],
 
   actions: {
-    // Disable the module entirely (useful for conditional loading)
-    enabled: true, // default
+    enabled: true,           // default — disable the module entirely
+    actionsDir: 'actions',   // default — directory name relative to server/
+    colocate: false,         // default — when true, also scans pages/**/actions/
   },
 })
 ```
@@ -256,11 +257,23 @@ You do not need to write any `import` statements for the module's utilities.
 - `defineMiddleware` -- Create reusable middleware
 - `createMiddleware` -- Alias for publishable middleware
 - `createActionError` -- Throw typed errors from handlers or middleware
+- `returnValidationErrors` -- Throw structured field-level validation errors
+- `rateLimitMiddleware` -- In-memory rate limiting per action
+- `csrfMiddleware` -- CSRF token protection for mutation actions
 
 **Client-side** (available in components, pages, composables):
 
 - `useAction` -- Reactive action caller
 - `useOptimisticAction` -- Reactive action caller with optimistic updates
+- `useActionQuery` -- SSR-capable GET queries with caching and polling
+- `useInfiniteActionQuery` -- Infinite scroll / cursor-based pagination
+- `useActions` -- Batch/parallel execution of multiple actions
+- `useFormAction` -- Form integration with field-level errors
+- `useActionState` -- Progressive enhancement with HTML forms
+- `useStreamAction` -- Stream consumer for SSE actions
+- `useStreamActionQuery` -- Streaming with automatic cache persistence
+- `prefetchAction` -- Pre-warm cache for action queries
+- `invalidateActions` / `clearActionCache` -- Cache management utilities
 
 ## Example Repository
 

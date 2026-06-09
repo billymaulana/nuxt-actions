@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { ref, computed, readonly } from 'vue'
 import type {
   TypedActionReference,
@@ -71,7 +72,7 @@ export function useActionState(
     : `/api/_actions/${pathOrAction.__actionPath}`
 
   // Delegate to useAction — the implementation accepts both string and TypedActionReference
-  const { execute, error, isExecuting } = useAction(
+  const { execute, error, isExecuting } = useAction<Record<string, unknown>>(
     pathOrAction as string,
     {
       onSuccess: (data: unknown) => {
@@ -109,9 +110,9 @@ export function useActionState(
   }))
 
   return {
-    state: readonly(state) as Readonly<globalThis.Ref<unknown>>,
+    state: readonly(state) as Readonly<Ref<unknown>>,
     error,
-    pending: readonly(computed(() => isExecuting.value)) as Readonly<globalThis.Ref<boolean>>,
+    pending: readonly(computed(() => isExecuting.value)) as Readonly<Ref<boolean>>,
     formAction,
     formProps,
   }

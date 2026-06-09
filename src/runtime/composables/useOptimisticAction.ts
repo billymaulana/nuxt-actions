@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { ref, computed, readonly, toValue, onScopeDispose } from 'vue'
 import { useNuxtApp } from '#app'
 import type {
@@ -29,22 +30,22 @@ import { buildFetchOptions, createDebouncedFn, createThrottledFn } from './_util
  */
 
 // Overload 1: typed reference
-export function useOptimisticAction<T extends TypedActionReference>(
+export function useOptimisticAction<T extends TypedActionReference, TData = InferActionOutput<T>>(
   action: T,
-  options: UseOptimisticActionOptions<InferActionInput<T>, InferActionOutput<T>>,
-): UseOptimisticActionReturn<InferActionInput<T>, InferActionOutput<T>>
+  options: UseOptimisticActionOptions<InferActionInput<T>, InferActionOutput<T>, TData>,
+): UseOptimisticActionReturn<InferActionInput<T>, InferActionOutput<T>, TData>
 
 // Overload 2: string path (backward compatible)
-export function useOptimisticAction<TInput = void, TOutput = unknown>(
+export function useOptimisticAction<TInput = void, TOutput = unknown, TData = TOutput>(
   path: string,
-  options: UseOptimisticActionOptions<TInput, TOutput>,
-): UseOptimisticActionReturn<TInput, TOutput>
+  options: UseOptimisticActionOptions<TInput, TOutput, TData>,
+): UseOptimisticActionReturn<TInput, TOutput, TData>
 
 // Implementation
 export function useOptimisticAction(
   pathOrAction: string | TypedActionReference,
-  options: UseOptimisticActionOptions<unknown, unknown>,
-): UseOptimisticActionReturn<unknown, unknown> {
+  options: UseOptimisticActionOptions<unknown, unknown, unknown>,
+): UseOptimisticActionReturn<unknown, unknown, unknown> {
   const nuxtApp = useNuxtApp()
 
   // Nuxt 3 exposes $fetch on nuxtApp; Nuxt 4 removed it — fall back to global $fetch
@@ -185,10 +186,10 @@ export function useOptimisticAction(
   // Wrap execute with debounce or throttle if configured (debounce takes priority)
   let wrappedExecute = execute
   if (options.debounce && options.debounce > 0) {
-    wrappedExecute = createDebouncedFn(execute, options.debounce) as typeof execute
+    wrappedExecute = createDebouncedFn(execute, options.debounce) as unknown as typeof execute
   }
   else if (options.throttle && options.throttle > 0) {
-    wrappedExecute = createThrottledFn(execute, options.throttle) as typeof execute
+    wrappedExecute = createThrottledFn(execute, options.throttle) as unknown as typeof execute
   }
 
   // Clean up timers and in-flight requests on scope dispose
@@ -204,10 +205,10 @@ export function useOptimisticAction(
 
   return {
     execute: wrappedExecute,
-    optimisticData: readonly(optimisticData) as Readonly<globalThis.Ref<unknown>>,
-    data: readonly(data) as Readonly<globalThis.Ref<unknown>>,
-    error: readonly(error) as Readonly<globalThis.Ref<ActionError | null>>,
-    status: readonly(status) as Readonly<globalThis.Ref<ActionStatus>>,
+    optimisticData: readonly(optimisticData) as Readonly<Ref<unknown>>,
+    data: readonly(data) as Readonly<Ref<unknown>>,
+    error: readonly(error) as Readonly<Ref<ActionError | null>>,
+    status: readonly(status) as Readonly<Ref<ActionStatus>>,
     isIdle,
     isExecuting,
     hasSucceeded,

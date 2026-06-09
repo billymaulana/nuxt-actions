@@ -64,10 +64,10 @@ Call it from any component:
 
 ```vue
 <script setup lang="ts">
-const { execute, data, error, status } = useAction<
-  { title: string },
-  { id: number; title: string }
->('/api/todos')
+import { createTodo } from '#actions'
+
+// Input and output types are inferred from the server action — no manual generics.
+const { execute, data, error, status } = useAction(createTodo)
 
 async function addTodo() {
   await execute({ title: 'Buy milk' })

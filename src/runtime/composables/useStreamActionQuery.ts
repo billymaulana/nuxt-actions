@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { shallowRef, ref, readonly, watch, triggerRef } from 'vue'
 import { useNuxtApp } from '#app'
 import type {
@@ -110,7 +111,7 @@ export function useStreamActionQuery(
   }
 
   // Delegate to useStreamAction for the actual streaming logic
-  const stream = useStreamAction(pathOrAction as string, wrappedOptions)
+  const stream = useStreamAction<unknown>(pathOrAction as string, wrappedOptions)
 
   // Sync status from the underlying stream (covers 'streaming' transition)
   watch(stream.status, (val) => {
@@ -143,11 +144,11 @@ export function useStreamActionQuery(
   return {
     execute,
     stop: stream.stop,
-    chunks: readonly(chunks) as Readonly<globalThis.Ref<unknown[]>>,
-    data: readonly(data) as Readonly<globalThis.Ref<unknown>>,
-    status: readonly(status) as Readonly<globalThis.Ref<StreamStatus>>,
-    error: readonly(error) as Readonly<globalThis.Ref<ActionError | null>>,
-    fromCache: readonly(fromCache) as Readonly<globalThis.Ref<boolean>>,
+    chunks: readonly(chunks) as Readonly<Ref<unknown[]>>,
+    data: readonly(data) as Readonly<Ref<unknown>>,
+    status: readonly(status) as Readonly<Ref<StreamStatus>>,
+    error: readonly(error) as Readonly<Ref<ActionError | null>>,
+    fromCache: readonly(fromCache) as Readonly<Ref<boolean>>,
     clearCache,
   }
 }

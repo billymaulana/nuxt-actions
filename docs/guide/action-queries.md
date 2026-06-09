@@ -51,6 +51,11 @@ const { data, pending } = useActionQuery(searchTodos, () => ({ q: query.value })
 | `lazy` | `boolean` | `false` | Don't block navigation |
 | `immediate` | `boolean` | `true` | Execute immediately |
 | `default` | `() => T` | - | Default value factory |
+| `refetchInterval` | `number \| false` | - | Auto-refetch interval in ms |
+| `refetchOnFocus` | `boolean` | `false` | Refetch when tab regains focus |
+| `refetchOnReconnect` | `boolean` | `false` | Refetch when network reconnects |
+| `enabled` | `boolean \| Ref<boolean>` | `true` | Conditionally enable/disable |
+| `transform` | `(data: T) => T` | - | Transform response data |
 
 ### Lazy Loading
 
@@ -65,6 +70,51 @@ const { data, pending } = useActionQuery(listTodos, undefined, {
 ```ts
 const { data } = useActionQuery(listTodos, undefined, {
   default: () => [], // Start with empty array
+})
+```
+
+### Polling
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  refetchInterval: 5000, // Refetch every 5 seconds
+})
+```
+
+### Refetch on Focus
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  refetchOnFocus: true, // Refetch when tab becomes visible
+})
+```
+
+### Refetch on Reconnect
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  refetchOnReconnect: true, // Refetch when network comes back
+})
+```
+
+### Conditional Fetching
+
+```ts
+const userId = ref<number | null>(null)
+const isReady = computed(() => userId.value !== null)
+
+const { data } = useActionQuery(
+  getUserProfile,
+  () => ({ id: userId.value! }),
+  { enabled: isReady },
+)
+```
+
+### Transform Response
+
+```ts
+const { data } = useActionQuery(listTodos, undefined, {
+  transform: (todos) => todos.sort((a, b) => b.id - a.id),
 })
 ```
 
@@ -105,3 +155,7 @@ export default defineAction({
   },
 })
 ```
+
+## Next Steps
+
+For cursor-based pagination and infinite scroll, see the [Infinite Queries](/guide/infinite-queries) guide.

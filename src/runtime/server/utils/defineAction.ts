@@ -1,5 +1,5 @@
-import { defineEventHandler, readBody, getQuery, getHeader } from 'h3'
-import type { H3Event } from 'h3'
+import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from 'h3'
+import type { H3Event, MultiPartData } from 'h3'
 import type {
   StandardSchemaV1,
   InferOutput,
@@ -95,7 +95,7 @@ export function defineAction<
       // 2. Run middleware chain
       let ctx = {} as TCtx
       if (options.middleware?.length) {
-        ctx = await runMiddleware(event, options.middleware, options.metadata ?? {})
+        ctx = await runMiddleware(event, options.middleware, options.metadata ?? {}) as TCtx
       }
 
       // 3. Execute handler — input is validated by Standard Schema at this point
@@ -194,6 +194,8 @@ export function defineAction<
   // Attach _execute and phantom _types for virtual module generation
   return Object.assign(handler, {
     _execute,
+    _input: options.input,
+    _outputSchema: options.outputSchema,
     _types: {} as {
       readonly input: TInput
       readonly output: TOutput
@@ -222,11 +224,43 @@ export function createActionError(opts: {
 
 // ── Internal helpers ──────────────────────────────────────────────
 
+export function foldMultipartData(parts: MultiPartData[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const part of parts) {
+    if (!part.name) continue
+    const value = part.filename !== undefined
+      ? { filename: part.filename, type: part.type ?? 'application/octet-stream', data: part.data }
+      : part.data.toString('utf-8')
+    if (part.name in out) {
+      const existing = out[part.name]
+      out[part.name] = Array.isArray(existing) ? [...existing, value] : [existing, value]
+    }
+    else {
+      out[part.name] = value
+    }
+  }
+  return out
+}
+
 async function parseInput(event: H3Event): Promise<unknown> {
   const method = event.method.toUpperCase()
 
   if (method === 'GET' || method === 'HEAD') {
     return getQuery(event)
+  }
+
+  if ((getHeader(event, 'content-type') ?? '').includes('multipart/form-data')) {
+    try {
+      const parts = await readMultipartFormData(event)
+      return foldMultipartData(parts ?? [])
+    }
+    catch {
+      throw createActionError({
+        code: 'PARSE_ERROR',
+        message: 'Invalid multipart form data',
+        statusCode: 400,
+      })
+    }
   }
 
   try {
@@ -332,7 +366,7 @@ export async function runMiddleware(
       event,
       ctx,
       metadata,
-      next: async (opts) => {
+      next: (async (opts?: { ctx?: Record<string, unknown> }) => {
         if (nextCalled) {
           throw new Error('[nuxt-actions] Middleware called next() more than once')
         }
@@ -341,7 +375,7 @@ export async function runMiddleware(
           ctx = deepMerge(ctx, opts.ctx)
         }
         return ctx
-      },
+      }) as <TNewCtx extends Record<string, unknown>>(opts?: { ctx: TNewCtx }) => Promise<TNewCtx & Record<string, unknown>>,
     })
 
     // If middleware did not call next(), stop the chain.

@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { ref, computed, readonly, onScopeDispose } from 'vue'
 import { useNuxtApp } from '#app'
 import type {
@@ -188,10 +189,10 @@ export function useAction(
   // Wrap execute with debounce or throttle if configured (debounce takes priority)
   let wrappedExecute = execute
   if (options.debounce && options.debounce > 0) {
-    wrappedExecute = createDebouncedFn(execute, options.debounce) as typeof execute
+    wrappedExecute = createDebouncedFn(execute, options.debounce) as unknown as typeof execute
   }
   else if (options.throttle && options.throttle > 0) {
-    wrappedExecute = createThrottledFn(execute, options.throttle) as typeof execute
+    wrappedExecute = createThrottledFn(execute, options.throttle) as unknown as typeof execute
   }
 
   // Clean up timers and in-flight requests on scope dispose
@@ -218,9 +219,9 @@ export function useAction(
   return {
     execute: wrappedExecute,
     executeAsync,
-    data: readonly(data) as Readonly<globalThis.Ref<unknown>>,
-    error: readonly(error) as Readonly<globalThis.Ref<ActionError | null>>,
-    status: readonly(status) as Readonly<globalThis.Ref<ActionStatus>>,
+    data: readonly(data) as Readonly<Ref<unknown>>,
+    error: readonly(error) as Readonly<Ref<ActionError | null>>,
+    status: readonly(status) as Readonly<Ref<ActionStatus>>,
     isIdle,
     isExecuting,
     hasSucceeded,

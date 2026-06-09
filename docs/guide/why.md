@@ -82,6 +82,8 @@ That is the entire implementation -- server and client. You get validated input,
 - **Output validation** to prevent data leaks and enforce API contracts
 - **Optimistic updates** with automatic rollback via `useOptimisticAction`
 - **Consistent error format** across all actions: `{ success, data }` or `{ success, error }`
+- **Polling, infinite scroll, batch actions** for advanced data fetching patterns
+- **Built-in security middleware (CSRF, rate limiting)** with zero-config defaults
 - **Auto-imported utilities** -- no manual imports for `defineAction`, `useAction`, or `defineMiddleware`
 
 ## Comparison
@@ -100,6 +102,12 @@ That is the entire implementation -- server and client. You get validated input,
 | DevTools integration | :white_check_mark: | :x: | :x: | :x: |
 | HMR type updates | :white_check_mark: | :white_check_mark: | :x: | :x: |
 | Security hardening (6 layers) | :white_check_mark: | :x: | :x: | :x: |
+| Infinite scroll / pagination | :white_check_mark: | :warning: Via tanstack | :x: | :x: |
+| Batch/parallel execution | :white_check_mark: | :x: | :x: | :x: |
+| Polling & background refetch | :white_check_mark: | :warning: Via tanstack | :x: | :x: |
+| Built-in CSRF middleware | :white_check_mark: | :x: | :x: | :x: |
+| Built-in rate limiting | :white_check_mark: | :x: | :x: | :x: |
+| Progressive enhancement | :white_check_mark: | :x: | :white_check_mark: | :x: |
 | Auto-imported utilities | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
 | Zero config | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
 | Nuxt-native (no protocol layer) | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: |
