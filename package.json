@@ -46,8 +46,12 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
+  "bin": {
+    "nuxt-actions": "./bin/nuxt-actions.mjs"
+  },
   "packageManager": "pnpm@10.27.0",
   "scripts": {
     "prepack": "nuxt-module-build build",
