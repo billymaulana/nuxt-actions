@@ -245,6 +245,59 @@ describe('nuxt-actions', async () => {
       expect(result.data.items).toHaveLength(2)
       expect(result.data.items[0]).toEqual({ id: 1, name: 'Item 1' })
     })
+
+    it('routes nested actions via /api/_actions/<dir>/<name>', async () => {
+      const result = await $fetch('/api/_actions/admin/stats')
+      expect(result.success).toBe(true)
+      expect(result.data).toEqual({ users: 3, uptime: 'ok' })
+    })
+  })
+
+  // ── Idempotency (defineAction option) ────────────────────────
+
+  describe('idempotency', () => {
+    it('replays the stored result for duplicate Idempotency-Key requests', async () => {
+      const key = `e2e-${Date.now()}`
+      const first = await $fetch('/api/_actions/pay', {
+        method: 'POST',
+        body: { amount: 100 },
+        headers: { 'Idempotency-Key': key },
+      })
+      const second = await $fetch('/api/_actions/pay', {
+        method: 'POST',
+        body: { amount: 100 },
+        headers: { 'Idempotency-Key': key },
+      })
+
+      expect(first.success).toBe(true)
+      expect(second).toEqual(first)
+    })
+
+    it('rejects the same key with a different payload', async () => {
+      const key = `e2e-conflict-${Date.now()}`
+      await $fetch('/api/_actions/pay', {
+        method: 'POST',
+        body: { amount: 100 },
+        headers: { 'Idempotency-Key': key },
+      })
+      const conflict = await $fetch('/api/_actions/pay', {
+        method: 'POST',
+        body: { amount: 999 },
+        headers: { 'Idempotency-Key': key },
+      })
+
+      expect(conflict.success).toBe(false)
+      expect(conflict.error.code).toBe('IDEMPOTENCY_KEY_REUSE')
+      expect(conflict.error.statusCode).toBe(422)
+    })
+
+    it('executes normally without a key', async () => {
+      const r1 = await $fetch('/api/_actions/pay', { method: 'POST', body: { amount: 1 } })
+      const r2 = await $fetch('/api/_actions/pay', { method: 'POST', body: { amount: 1 } })
+      expect(r1.success).toBe(true)
+      expect(r2.success).toBe(true)
+      expect(r2.data.txId).not.toBe(r1.data.txId)
+    })
   })
 
   // ── Valibot integration ──────────────────────────────────────

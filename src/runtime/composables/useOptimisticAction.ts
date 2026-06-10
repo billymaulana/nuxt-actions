@@ -11,7 +11,7 @@ import type {
   InferActionInput,
   InferActionOutput,
 } from '../types'
-import { buildFetchOptions, createDebouncedFn, createThrottledFn } from './_utils'
+import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, isTimeoutAbort, TIMEOUT_ABORT_REASON } from './_utils'
 
 /**
  * Composable for optimistic updates with automatic rollback on error.
@@ -96,9 +96,20 @@ export function useOptimisticAction(
     optimisticData.value = options.updateFn(input, optimisticData.value)
 
     options.onExecute?.(input)
+    const startedAt = Date.now()
+    emitActionHook(nuxtApp, 'action:start', { path, method, input })
 
     status.value = 'executing'
     error.value = null
+
+    /*
+     * ofetch silently ignores its timeout option when an external signal is
+     * provided, so the timeout is enforced here on the owned controller.
+     */
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined
+    if (options.timeout && options.timeout > 0) {
+      timeoutTimer = setTimeout(() => controller.abort(TIMEOUT_ABORT_REASON), options.timeout)
+    }
 
     try {
       const fetchOptions = buildFetchOptions({
@@ -106,7 +117,6 @@ export function useOptimisticAction(
         input,
         headers: options.headers,
         retry: options.retry,
-        timeout: options.timeout,
         signal: controller.signal,
       })
 
@@ -115,6 +125,7 @@ export function useOptimisticAction(
         fetchOptions,
       )
 
+      const durationMs = Date.now() - startedAt
       if (result.success) {
         const transformed = options.transform ? options.transform(result.data as never) : result.data
         data.value = transformed
@@ -123,6 +134,8 @@ export function useOptimisticAction(
         status.value = 'success'
         options.onSuccess?.(result.data)
         options.onSettled?.(result)
+        emitActionHook(nuxtApp, 'action:success', { path, method, input, data: result.data, durationMs })
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
         return result
       }
       else {
@@ -134,30 +147,61 @@ export function useOptimisticAction(
         status.value = 'error'
         options.onError?.(result.error)
         options.onSettled?.(result)
+        emitActionHook(nuxtApp, 'action:error', { path, method, input, error: result.error, durationMs })
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
         return result
       }
     }
     catch (err: unknown) {
-      // Handle aborted requests — do NOT rollback optimistic data on intentional cancellation
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        status.value = 'idle'
+      const durationMs = Date.now() - startedAt
+
+      /*
+       * Abort detection keys off the owned signal — ofetch wraps the native
+       * AbortError in a FetchError. Intentional cancellation must NOT roll
+       * back the optimistic data.
+       */
+      /*
+       * A superseded call is always aborted first (execute/reset/dispose all
+       * abort the previous controller), so reaching the timeout or generic
+       * branches below implies this call is still the latest — rollback is
+       * safe without a counter check.
+       */
+      if (isAbortRejection(err, controller.signal)) {
+        if (isTimeoutAbort(controller.signal)) {
+          optimisticData.value = snapshot
+          const timeoutError: ActionError = {
+            code: 'TIMEOUT_ERROR',
+            message: `Request timed out after ${options.timeout}ms`,
+            statusCode: 408,
+          }
+          error.value = timeoutError
+          status.value = 'error'
+          const result: ActionResult<unknown> = { success: false, error: timeoutError }
+          options.onError?.(timeoutError)
+          options.onSettled?.(result)
+          emitActionHook(nuxtApp, 'action:error', { path, method, input, error: timeoutError, durationMs })
+          emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
+          return result
+        }
+
+        if (currentController === controller) {
+          status.value = 'idle'
+        }
         const abortResult: ActionResult<unknown> = {
           success: false,
           error: { code: 'ABORT_ERROR', message: 'Request was aborted', statusCode: 0 },
         }
         options.onSettled?.(abortResult)
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result: abortResult, durationMs })
         return abortResult
       }
 
-      // Only rollback if no newer call has superseded this one
-      if (callCounter === thisCallId) {
-        optimisticData.value = snapshot
-      }
+      optimisticData.value = snapshot
 
       const actionError: ActionError = {
         code: 'FETCH_ERROR',
         message: err instanceof Error ? err.message : 'Failed to execute action',
-        statusCode: 500,
+        statusCode: 0,
       }
 
       error.value = actionError
@@ -166,8 +210,13 @@ export function useOptimisticAction(
       const result: ActionResult<unknown> = { success: false, error: actionError }
       options.onError?.(actionError)
       options.onSettled?.(result)
+      emitActionHook(nuxtApp, 'action:error', { path, method, input, error: actionError, durationMs })
+      emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
 
       return result
+    }
+    finally {
+      if (timeoutTimer) clearTimeout(timeoutTimer)
     }
   }
 
@@ -192,6 +241,13 @@ export function useOptimisticAction(
     wrappedExecute = createThrottledFn(execute, options.throttle) as unknown as typeof execute
   }
 
+  function cancel() {
+    if (wrappedExecute !== execute && 'cancel' in wrappedExecute) {
+      (wrappedExecute as { cancel: () => void }).cancel()
+    }
+    currentController?.abort()
+  }
+
   // Clean up timers and in-flight requests on scope dispose
   if (wrappedExecute !== execute && 'cancel' in wrappedExecute) {
     onScopeDispose(() => (wrappedExecute as { cancel: () => void }).cancel())
@@ -213,6 +269,7 @@ export function useOptimisticAction(
     isExecuting,
     hasSucceeded,
     hasErrored,
+    cancel,
     reset,
   }
 }

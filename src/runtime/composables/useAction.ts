@@ -11,7 +11,7 @@ import type {
   InferActionInput,
   InferActionOutput,
 } from '../types'
-import { buildFetchOptions, createDebouncedFn, createThrottledFn } from './_utils'
+import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, isTimeoutAbort, TIMEOUT_ABORT_REASON } from './_utils'
 
 /**
  * Composable to call a server action with reactive state management.
@@ -77,14 +77,17 @@ export function useAction(
   let currentController: AbortController | null = null
   let currentPromise: Promise<ActionResult<unknown>> | null = null
 
+  // cancelPrevious is sugar for dedupe: 'cancel'; an explicit dedupe wins
+  const dedupe = options.dedupe ?? (options.cancelPrevious ? 'cancel' : undefined)
+
   async function execute(input: unknown): Promise<ActionResult<unknown>> {
     // Dedupe: 'defer' returns the existing in-flight promise
-    if (currentPromise && options.dedupe === 'defer') {
+    if (currentPromise && dedupe === 'defer') {
       return currentPromise
     }
 
     // Dedupe: 'cancel' aborts previous in-flight request
-    if (currentController && options.dedupe === 'cancel') {
+    if (currentController && dedupe === 'cancel') {
       currentController.abort()
     }
 
@@ -111,9 +114,20 @@ export function useAction(
     controller: AbortController,
   ): Promise<ActionResult<unknown>> {
     options.onExecute?.(input)
+    const startedAt = Date.now()
+    emitActionHook(nuxtApp, 'action:start', { path, method, input })
 
     status.value = 'executing'
     error.value = null
+
+    /*
+     * ofetch silently ignores its timeout option when an external signal is
+     * provided, so the timeout is enforced here on the owned controller.
+     */
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined
+    if (options.timeout && options.timeout > 0) {
+      timeoutTimer = setTimeout(() => controller.abort(TIMEOUT_ABORT_REASON), options.timeout)
+    }
 
     try {
       const fetchOptions = buildFetchOptions({
@@ -121,7 +135,6 @@ export function useAction(
         input,
         headers: options.headers,
         retry: options.retry,
-        timeout: options.timeout,
         signal: controller.signal,
       })
 
@@ -130,11 +143,14 @@ export function useAction(
         fetchOptions,
       )
 
+      const durationMs = Date.now() - startedAt
       if (result.success) {
         data.value = options.transform ? options.transform(result.data as never) : result.data
         status.value = 'success'
         options.onSuccess?.(result.data)
         options.onSettled?.(result)
+        emitActionHook(nuxtApp, 'action:success', { path, method, input, data: result.data, durationMs })
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
         return result
       }
       else {
@@ -142,18 +158,49 @@ export function useAction(
         status.value = 'error'
         options.onError?.(result.error)
         options.onSettled?.(result)
+        emitActionHook(nuxtApp, 'action:error', { path, method, input, error: result.error, durationMs })
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
         return result
       }
     }
     catch (err: unknown) {
-      // Handle aborted requests (dedupe cancel or manual reset)
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        status.value = 'idle'
+      const durationMs = Date.now() - startedAt
+
+      /*
+       * Abort detection keys off the owned signal: ofetch wraps the native
+       * AbortError in a FetchError, so the thrown value's identity is not
+       * reliable across runtimes.
+       */
+      if (isAbortRejection(err, controller.signal)) {
+        if (isTimeoutAbort(controller.signal)) {
+          const timeoutError: ActionError = {
+            code: 'TIMEOUT_ERROR',
+            message: `Request timed out after ${options.timeout}ms`,
+            statusCode: 408,
+          }
+          error.value = timeoutError
+          status.value = 'error'
+          const result: ActionResult<unknown> = { success: false, error: timeoutError }
+          options.onError?.(timeoutError)
+          options.onSettled?.(result)
+          emitActionHook(nuxtApp, 'action:error', { path, method, input, error: timeoutError, durationMs })
+          emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
+          return result
+        }
+
+        /*
+         * A stale aborted request (cancelPrevious/dedupe) must not clobber
+         * the state of a newer in-flight call.
+         */
+        if (currentController === controller) {
+          status.value = 'idle'
+        }
         const abortResult: ActionResult<unknown> = {
           success: false,
           error: { code: 'ABORT_ERROR', message: 'Request was aborted', statusCode: 0 },
         }
         options.onSettled?.(abortResult)
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result: abortResult, durationMs })
         return abortResult
       }
 
@@ -169,8 +216,13 @@ export function useAction(
       const result: ActionResult<unknown> = { success: false, error: actionError }
       options.onError?.(actionError)
       options.onSettled?.(result)
+      emitActionHook(nuxtApp, 'action:error', { path, method, input, error: actionError, durationMs })
+      emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
 
       return result
+    }
+    finally {
+      if (timeoutTimer) clearTimeout(timeoutTimer)
     }
   }
 
@@ -193,6 +245,13 @@ export function useAction(
   }
   else if (options.throttle && options.throttle > 0) {
     wrappedExecute = createThrottledFn(execute, options.throttle) as unknown as typeof execute
+  }
+
+  function cancel() {
+    if (wrappedExecute !== execute && 'cancel' in wrappedExecute) {
+      (wrappedExecute as { cancel: () => void }).cancel()
+    }
+    currentController?.abort()
   }
 
   // Clean up timers and in-flight requests on scope dispose
@@ -226,6 +285,7 @@ export function useAction(
     isExecuting,
     hasSucceeded,
     hasErrored,
+    cancel,
     reset,
   }
 }

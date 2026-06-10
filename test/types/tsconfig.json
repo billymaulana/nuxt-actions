@@ -4,7 +4,13 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "#app": [
+        "../../node_modules/nuxt/dist/app"
+      ]
+    }
   },
   "include": [
     "./**/*.test-d.ts",

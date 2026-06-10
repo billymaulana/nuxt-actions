@@ -39,8 +39,12 @@ Works with <strong>Zod</strong>, <strong>Valibot</strong>, <strong>ArkType</stro
 - **SSR Queries** - `useActionQuery` wraps `useAsyncData` for SSR, caching, and reactive re-fetching
 - **Smart Cache** - `useActionMutation` auto-refetches affected queries via typed references or tags (`invalidateTags`)
 - **Streaming Actions** - `defineStreamAction` + `useStreamAction` for real-time AI/streaming use cases
-- **Retry/Backoff** - Native ofetch retry with `retry: true | number | { count, delay, statusCodes }`
-- **Request Deduplication** - `dedupe: 'cancel' | 'defer'` to prevent duplicate requests
+- **Retry/Backoff** - `retry: { count, delay, backoff: 'exponential' | 'linear', maxDelay, jitter }` with thundering-herd protection
+- **Request Deduplication** - `dedupe: 'cancel' | 'defer'`, `cancelPrevious: true`, and manual `cancel()`
+- **Idempotency** - `idempotency` option replays duplicate `Idempotency-Key` requests instead of re-running handlers
+- **Global Hooks** - `action:start/success/error/settled` on `nuxtApp` for analytics, toasts, and monitoring
+- **Typed Error Codes** - `ActionErrorCode` union + client-side `isActionError` for safe narrowing
+- **Grouped Namespace** - `actions.auth.login` mirrors your directory structure alongside flat exports
 - **Custom Headers** - Per-request auth tokens via static headers or function
 - **CLI Scaffold** - `npx nuxt-actions add <name>` generates a typed action file
 - **OpenAPI** - generate an OpenAPI 3.1 document + Swagger UI from your actions

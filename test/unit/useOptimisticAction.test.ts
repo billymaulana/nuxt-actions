@@ -567,13 +567,15 @@ describe('useOptimisticAction', () => {
       const promise1 = execute({ id: 1 })
       const promise2 = execute({ id: 1 })
 
-      await promise1
+      const result1 = await promise1
 
-      // Non-Error: message should be 'Failed to execute action'
-      expect(error.value).toMatchObject({
-        code: 'FETCH_ERROR',
-        message: 'Failed to execute action',
-      })
+      /*
+       * The first call was aborted by the second (always cancel-previous):
+       * it settles as ABORT_ERROR and must not clobber shared error state.
+       */
+      expect(result1.success).toBe(false)
+      if (!result1.success) expect(result1.error.code).toBe('ABORT_ERROR')
+      expect(error.value).toBeNull()
 
       resolveSecond!({
         success: true,
@@ -749,16 +751,35 @@ describe('useOptimisticAction', () => {
   })
 
   describe('timeout', () => {
-    it('passes timeout to fetch options', async () => {
+    it('enforces timeout client-side instead of forwarding it to ofetch', async () => {
+      vi.useFakeTimers()
       const data = ref({})
-      mockFetch.mockResolvedValue({ success: true, data: {} })
-      const { execute } = useOptimisticAction('/api/test', {
+      let capturedSignal: AbortSignal | undefined
+      mockFetch.mockImplementationOnce((_path: string, opts: { signal: AbortSignal }) => {
+        capturedSignal = opts.signal
+        return new Promise((_resolve, reject) => {
+          opts.signal.addEventListener('abort', () => reject(new Error('aborted')))
+        })
+      })
+
+      const { execute, error } = useOptimisticAction('/api/test', {
         timeout: 3000,
         currentData: data,
         updateFn: (_input, current) => current,
       })
-      await execute({})
-      expect(mockFetch).toHaveBeenCalledWith('/api/test', expect.objectContaining({ timeout: 3000 }))
+
+      const promise = execute({})
+      const opts = mockFetch.mock.calls[0][1]
+      expect(opts).not.toHaveProperty('timeout')
+
+      vi.advanceTimersByTime(3000)
+      const result = await promise
+
+      expect(capturedSignal?.aborted).toBe(true)
+      expect(result.success).toBe(false)
+      if (!result.success) expect(result.error.code).toBe('TIMEOUT_ERROR')
+      expect(error.value?.statusCode).toBe(408)
+      vi.useRealTimers()
     })
   })
 

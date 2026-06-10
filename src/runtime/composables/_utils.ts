@@ -18,6 +18,17 @@ export function stableStringify(value: unknown): string {
     // Handle non-plain objects before cycle detection
     if (val instanceof Date) return JSON.stringify(val.toISOString())
     if (val instanceof RegExp) return JSON.stringify(val.toString())
+    if (ArrayBuffer.isView(val) || val instanceof ArrayBuffer) {
+      /*
+       * Binary payloads (multipart uploads) are summarized instead of
+       * serialized byte-by-byte: a megabyte Buffer would otherwise explode
+       * into tens of megabytes of JSON for idempotency fingerprints.
+       */
+      const bytes = ArrayBuffer.isView(val)
+        ? new Uint8Array(val.buffer, val.byteOffset, val.byteLength)
+        : new Uint8Array(val)
+      return `["__binary__",${bytes.byteLength},"${fnv1a(bytes)}"]`
+    }
     if (val instanceof Map) return serialize(Object.fromEntries(val))
     if (val instanceof Set) return serialize([...val])
 
@@ -42,6 +53,18 @@ export function stableStringify(value: unknown): string {
   return serialize(value)
 }
 
+/**
+ * FNV-1a 32-bit hash — fast, dependency-free digest for binary fingerprints.
+ */
+function fnv1a(bytes: Uint8Array): string {
+  let hash = 0x811C9DC5
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i]!
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16)
+}
+
 // ── Retry helpers ─────────────────────────────────────────────────
 
 export function resolveRetryCount(opt?: boolean | number | RetryConfig): number | false {
@@ -59,6 +82,80 @@ export function resolveRetryDelay(opt?: boolean | number | RetryConfig): number 
 export function resolveRetryStatusCodes(opt?: boolean | number | RetryConfig): number[] | undefined {
   if (!opt || typeof opt !== 'object') return undefined
   return opt.statusCodes
+}
+
+/**
+ * Compute the delay before retry attempt `attempt` (1-based).
+ * Applies the growth strategy, caps at maxDelay, then applies jitter so the
+ * cap is never exceeded. Jitter randomizes within [50%, 100%] of the value
+ * (equal jitter) to spread out concurrent retries.
+ */
+export function computeRetryDelay(config: RetryConfig, attempt: number): number {
+  const base = config.delay ?? 500
+  let delay: number
+  switch (config.backoff) {
+    case 'exponential':
+      delay = base * 2 ** (attempt - 1)
+      break
+    case 'linear':
+      delay = base * attempt
+      break
+    default:
+      delay = base
+  }
+  if (config.maxDelay !== undefined) {
+    delay = Math.min(delay, config.maxDelay)
+  }
+  if (config.jitter) {
+    delay = delay / 2 + Math.random() * (delay / 2)
+  }
+  return Math.round(delay)
+}
+
+function needsDynamicRetryDelay(config: RetryConfig): boolean {
+  return (config.backoff !== undefined && config.backoff !== 'fixed')
+    || config.jitter === true
+    || config.maxDelay !== undefined
+}
+
+// ── Abort & timeout helpers ───────────────────────────────────────
+
+export const TIMEOUT_ABORT_REASON = 'nuxt-actions:timeout'
+
+/**
+ * Detect an aborted request across runtimes. Real ofetch never rethrows the
+ * raw DOMException — it wraps rejections in a FetchError with the original
+ * AbortError on `cause` — so the owned signal is the source of truth.
+ */
+export function isAbortRejection(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true
+  const candidate = err as { name?: string, cause?: { name?: string } } | null | undefined
+  return candidate?.name === 'AbortError' || candidate?.cause?.name === 'AbortError'
+}
+
+export function isTimeoutAbort(signal: AbortSignal): boolean {
+  return signal.aborted && signal.reason === TIMEOUT_ABORT_REASON
+}
+
+// ── Global hook emitter ───────────────────────────────────────────
+
+/**
+ * Emit a global action hook without ever affecting the action lifecycle:
+ * fire-and-forget, and a throwing hook handler is swallowed. The target is
+ * typed as unknown because NuxtApp.callHook's strictly-keyed signature is
+ * not assignable to a loose structural type.
+ */
+export function emitActionHook(target: unknown, name: string, payload: unknown): void {
+  const callHook = (target as { callHook?: unknown } | null | undefined)?.callHook
+  if (typeof callHook !== 'function') return
+  try {
+    void Promise.resolve(
+      (callHook as (n: string, p: unknown) => unknown).call(target, name, payload),
+    ).catch(() => {})
+  }
+  catch {
+    /* a synchronously-throwing hook must not break execute() */
+  }
 }
 
 // ── Header helpers ────────────────────────────────────────────────
@@ -102,8 +199,22 @@ export function buildFetchOptions(opts: FetchOptionInputs): Record<string, unkno
   const retryCount = resolveRetryCount(opts.retry)
   if (retryCount !== false) {
     fetchOptions.retry = retryCount
-    const retryDelay = resolveRetryDelay(opts.retry)
-    if (retryDelay !== undefined) fetchOptions.retryDelay = retryDelay
+    const retryConfig = typeof opts.retry === 'object' ? opts.retry : undefined
+    if (retryConfig && needsDynamicRetryDelay(retryConfig)) {
+      /*
+       * ofetch decrements options.retry before each subsequent attempt, so the
+       * remaining count at failure time yields a 1-based attempt index.
+       */
+      fetchOptions.retryDelay = (context: { options: { retry?: number | boolean } }) => {
+        const remaining = typeof context.options.retry === 'number' ? context.options.retry : retryCount
+        const attempt = Math.max(1, retryCount - remaining + 1)
+        return computeRetryDelay(retryConfig, attempt)
+      }
+    }
+    else {
+      /* Honor the documented 500ms default for object configs — ofetch's own default is 0ms */
+      if (retryConfig) fetchOptions.retryDelay = retryConfig.delay ?? 500
+    }
     const retryStatusCodes = resolveRetryStatusCodes(opts.retry)
     if (retryStatusCodes) fetchOptions.retryStatusCodes = retryStatusCodes
   }

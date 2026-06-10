@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.3.0 (2026-06-10)
+
+### Features
+
+- **Idempotency** — `defineAction({ idempotency })` and `createActionClient().idempotency()` replay a stored result for duplicate `Idempotency-Key` requests (Stripe-style semantics): same key + same payload replays without re-running the handler, a different payload returns `422 IDEMPOTENCY_KEY_REUSE`, concurrent duplicates await the in-flight execution, and failures stay retryable. Keys are scopable per identity via `scope` (recommended: session user id, since replay skips middleware), storage is pluggable via `IdempotencyStore` (bounded in-memory default; `createMemoryIdempotencyStore` exported), and store outages degrade gracefully (best-effort persistence, binary inputs fingerprinted by digest).
+- **Global action hooks** — `action:start`, `action:success`, `action:error`, and `action:settled` fire on `nuxtApp` for every `useAction`/`useOptimisticAction` call (and the composables built on them), with typed payloads including `durationMs`. Fire-and-forget: a slow or throwing hook never affects the action.
+- **Retry backoff** — `retry: { backoff: 'exponential' | 'linear', maxDelay, jitter }` grows delays per attempt, caps them, and randomizes within [50%, 100%] to avoid thundering-herd retries. The default stays flat.
+- **`cancelPrevious` + `cancel()`** — `cancelPrevious: true` on `useAction`/`useFormAction` is shorthand for `dedupe: 'cancel'` (type-ahead search), and the new `cancel()` method — available on `useAction`, `useOptimisticAction`, and `useFormAction` — aborts the in-flight request without clearing state (unlike `reset()`). `useOptimisticAction` always cancels the previous request. Abort detection now keys off the owned AbortController signal, and the `timeout` option is enforced client-side (`TIMEOUT_ERROR`, 408) since ofetch ignores its timeout when an external signal is set.
+- **Typed error codes** — `ActionError.code` is now the open union `ActionErrorCode` (all built-in codes with autocomplete, custom codes still assignable), and `isActionError` is auto-imported client-side for narrowing unknown errors.
+- **Grouped `actions` namespace** — `#actions` additionally exports one `actions` object mirroring the directory structure: `actions.auth.login` is the same typed reference as the flat `authLogin`. Collisions warn at build time and fall back to flat exports.
+
 ## v1.2.0 (2026-06-10)
 
 ### Bug Fixes

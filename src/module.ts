@@ -3,7 +3,7 @@ import { join, relative } from 'node:path'
 import {
   defineNuxtModule,
   addServerImportsDir,
-  addImportsDir,
+  addImports,
   addTemplate,
   createResolver,
   useLogger,
@@ -269,8 +269,29 @@ export default defineNuxtModule<ModuleOptions>({
     // Auto-import server utilities: defineAction, createActionError, defineMiddleware
     addServerImportsDir(resolver.resolve('./runtime/server/utils'))
 
-    // Auto-import client composables: useAction, useOptimisticAction
-    addImportsDir(resolver.resolve('./runtime/composables'))
+    /*
+     * Composables are registered by explicit name so internal helpers in
+     * _utils.ts/_tagRegistry.ts never leak into the app's global namespace.
+     */
+    const composableImports: Array<{ names: string[], file: string }> = [
+      { names: ['useAction'], file: 'useAction' },
+      { names: ['useActionMutation'], file: 'useActionMutation' },
+      { names: ['useFormAction'], file: 'useFormAction' },
+      { names: ['useOptimisticAction'], file: 'useOptimisticAction' },
+      { names: ['useActionQuery'], file: 'useActionQuery' },
+      { names: ['useInfiniteActionQuery'], file: 'useInfiniteActionQuery' },
+      { names: ['useStreamAction'], file: 'useStreamAction' },
+      { names: ['useStreamActionQuery'], file: 'useStreamActionQuery' },
+      { names: ['useActions'], file: 'useActions' },
+      { names: ['useActionState'], file: 'useActionState' },
+      { names: ['prefetchAction'], file: 'prefetchAction' },
+      { names: ['invalidateActions', 'invalidateTags', 'clearActionCache'], file: 'invalidateActions' },
+      { names: ['isActionError'], file: 'isActionError' },
+    ]
+    addImports(composableImports.flatMap(entry => entry.names.map(name => ({
+      name,
+      from: resolver.resolve(`./runtime/composables/${entry.file}`),
+    }))))
 
     // ── E2E Type Inference: Scan actions directory ──────────────
 
@@ -359,7 +380,7 @@ export default defineNuxtModule<ModuleOptions>({
         // Re-scan on each call to support HMR
         const freshFiles = scanActionFiles(actionsDirPath)
         const freshActions = buildScannedActions(freshFiles, nuxt, actionsDir)
-        return generateActionsTemplate(freshActions, nuxt.options.buildDir)
+        return generateActionsTemplate(freshActions, nuxt.options.buildDir, msg => logger.warn(msg))
       },
     })
 
@@ -424,6 +445,7 @@ export default defineNuxtModule<ModuleOptions>({
 function generateActionsTemplate(
   actions: ScannedAction[],
   buildDir: string,
+  warn?: (msg: string) => void,
 ): string {
   if (actions.length === 0) {
     return [
@@ -468,7 +490,100 @@ function generateActionsTemplate(
     )
   }
 
+  lines.push(...generateNamespaceExport(actions, warn))
+
   return lines.join('\n')
+}
+
+type NamespaceNode
+  = | { kind: 'leaf', constName: string }
+    | { kind: 'group', children: Map<string, NamespaceNode> }
+
+/**
+ * Build the nested namespace tree for the grouped `actions` export.
+ * Directory segments become groups, file names become leaves referencing the
+ * flat typed consts: auth/login.post.ts -> actions.auth.login (=== authLogin).
+ * Exported for unit testing.
+ */
+export function buildNamespaceTree(
+  actions: Array<Pick<ScannedAction, 'name' | 'path'>>,
+  warn?: (msg: string) => void,
+): Map<string, NamespaceNode> {
+  const root = new Map<string, NamespaceNode>()
+
+  for (const action of actions) {
+    const segments = action.path.split('/').map(toCamelCase)
+    const leafKey = segments[segments.length - 1]!
+    const groupSegments = segments.slice(0, -1)
+
+    let node = root
+    let skipped = false
+    for (const segment of groupSegments) {
+      const existing = node.get(segment)
+      if (existing && existing.kind === 'leaf') {
+        warn?.(`Namespace collision: group "${segment}" conflicts with action "${existing.constName}". Skipping "${action.path}" in the grouped actions export (flat export still works).`)
+        skipped = true
+        break
+      }
+      if (!existing) {
+        const group: NamespaceNode = { kind: 'group', children: new Map() }
+        node.set(segment, group)
+        node = group.children
+      }
+      else {
+        node = existing.children
+      }
+    }
+    if (skipped) continue
+
+    const existingLeaf = node.get(leafKey)
+    if (existingLeaf) {
+      warn?.(`Namespace collision: "${leafKey}" already exists at this level. Skipping "${action.path}" in the grouped actions export (flat export still works).`)
+      continue
+    }
+    node.set(leafKey, { kind: 'leaf', constName: action.name })
+  }
+
+  return root
+}
+
+/**
+ * Emit the grouped `export const actions` literal. Skipped entirely when a
+ * flat action is itself named `actions` (would shadow the grouped export).
+ * Exported for unit testing.
+ */
+export function generateNamespaceExport(
+  actions: Array<Pick<ScannedAction, 'name' | 'path'>>,
+  warn?: (msg: string) => void,
+): string[] {
+  if (actions.some(a => a.name === 'actions')) {
+    warn?.('An action named "actions" conflicts with the grouped actions export — skipping the grouped export. Rename the file to restore it.')
+    return []
+  }
+
+  const tree = buildNamespaceTree(actions, warn)
+  const lines: string[] = ['export const actions = Object.freeze({']
+  serializeNamespaceTree(tree, lines, 1)
+  lines.push('})', '')
+  return lines
+}
+
+function serializeNamespaceTree(
+  node: Map<string, NamespaceNode>,
+  lines: string[],
+  depth: number,
+): void {
+  const indent = '  '.repeat(depth)
+  for (const [key, child] of node) {
+    if (child.kind === 'leaf') {
+      lines.push(key === child.constName ? `${indent}${key},` : `${indent}${key}: ${child.constName},`)
+    }
+    else {
+      lines.push(`${indent}${key}: {`)
+      serializeNamespaceTree(child.children, lines, depth + 1)
+      lines.push(`${indent}},`)
+    }
+  }
 }
 
 const SWAGGER_VERSION = '5.32.6'

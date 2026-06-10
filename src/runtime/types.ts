@@ -60,8 +60,30 @@ export type InferOutput<T> = T extends StandardSchemaV1<any, infer O> ? O : neve
 
 export type ActionStatus = 'idle' | 'executing' | 'success' | 'error'
 
+/**
+ * Error codes emitted by nuxt-actions itself. The union stays open
+ * (`string & {}`) so custom codes thrown via createActionError keep working
+ * while built-in codes get autocomplete and exhaustiveness help.
+ */
+export type ActionErrorCode
+  = | 'VALIDATION_ERROR'
+    | 'OUTPUT_VALIDATION_ERROR'
+    | 'PARSE_ERROR'
+    | 'UNAUTHORIZED'
+    | 'RATE_LIMIT'
+    | 'CSRF_ERROR'
+    | 'IDEMPOTENCY_KEY_REQUIRED'
+    | 'IDEMPOTENCY_KEY_REUSE'
+    | 'SERVER_ERROR'
+    | 'INTERNAL_ERROR'
+    | 'FETCH_ERROR'
+    | 'ABORT_ERROR'
+    | 'TIMEOUT_ERROR'
+    | 'STREAM_ERROR'
+    | (string & {})
+
 export interface ActionError {
-  code: string
+  code: ActionErrorCode
   message: string
   fieldErrors?: Record<string, string[]>
   statusCode: number
@@ -114,6 +136,8 @@ export interface ActionOptions<
   outputSchema?: TOutputSchema
   middleware?: ActionMiddleware[]
   metadata?: ActionMetadata
+  /** Replay protection keyed by the Idempotency-Key header. */
+  idempotency?: IdempotencyConfig
   handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>
 }
 
@@ -132,7 +156,17 @@ export interface AuthMiddlewareOptions {
 
 // ── Builder Pattern Types ─────────────────────────────────────────
 
-export interface ActionClient<TCtx = Record<string, never>> {
+/**
+ * Built actions carry the same phantom `_types` as defineAction so the
+ * generated #actions template can infer end-to-end types for builder actions.
+ */
+export type BuiltAction<TInput, TOutput>
+  = ReturnType<typeof import('h3')['defineEventHandler']> & {
+    _execute: (rawInput: unknown, event: H3Event) => Promise<ActionResult<TOutput>>
+    _types: { readonly input: TInput, readonly output: TOutput }
+  }
+
+export interface ActionClient<TCtx = Record<string, unknown>> {
   use: <TNewCtx extends Record<string, unknown>>(
     middleware: ActionMiddleware<TCtx, TNewCtx>,
   ) => ActionClient<TCtx & TNewCtx>
@@ -140,9 +174,11 @@ export interface ActionClient<TCtx = Record<string, never>> {
     inputSchema: TInputSchema,
   ) => ActionClientWithSchema<TCtx, TInputSchema>
   metadata: (meta: ActionMetadata) => ActionClient<TCtx>
+  /** Enable Idempotency-Key replay protection for actions built from this client. */
+  idempotency: (config?: IdempotencyConfig) => ActionClient<TCtx>
   action: <TOutput>(
     handler: ActionHandler<unknown, TOutput, TCtx>,
-  ) => ReturnType<typeof import('h3')['defineEventHandler']>
+  ) => BuiltAction<unknown, TOutput>
 }
 
 export interface ActionClientWithSchema<TCtx, TInputSchema extends StandardSchemaV1> {
@@ -150,9 +186,11 @@ export interface ActionClientWithSchema<TCtx, TInputSchema extends StandardSchem
     schema: TOutputSchema,
   ) => ActionClientWithSchema<TCtx, TInputSchema>
   metadata: (meta: ActionMetadata) => ActionClientWithSchema<TCtx, TInputSchema>
+  /** Enable Idempotency-Key replay protection for actions built from this client. */
+  idempotency: (config?: IdempotencyConfig) => ActionClientWithSchema<TCtx, TInputSchema>
   action: <TOutput>(
     handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>,
-  ) => ReturnType<typeof import('h3')['defineEventHandler']>
+  ) => BuiltAction<InferInput<TInputSchema>, TOutput>
 }
 
 // ── Typed Action Reference (E2E Type Inference) ──────────────────
@@ -181,10 +219,23 @@ export interface TypedActionHandler<TInput = unknown, TOutput = unknown> {
 export interface RetryConfig {
   /** Number of retry attempts. Default: 3 */
   count?: number
-  /** Delay between retries in milliseconds. Default: 500 */
+  /** Base delay between retries in milliseconds. Default: 500 */
   delay?: number
   /** HTTP status codes to retry on. Default: [408, 409, 425, 429, 500, 502, 503, 504] */
   statusCodes?: number[]
+  /**
+   * Delay growth strategy across attempts.
+   * 'fixed' keeps the base delay, 'linear' multiplies by the attempt number,
+   * 'exponential' doubles per attempt. Default: 'fixed'
+   */
+  backoff?: 'fixed' | 'linear' | 'exponential'
+  /** Upper bound for a single retry delay in milliseconds. */
+  maxDelay?: number
+  /**
+   * Randomize each delay between 50% and 100% of the computed value to avoid
+   * thundering-herd retries. Default: false
+   */
+  jitter?: boolean
 }
 
 // ── useAction Options ─────────────────────────────────────────────
@@ -199,6 +250,11 @@ export interface UseActionOptions<TInput, TOutput> {
   timeout?: number
   /** Request deduplication strategy. 'cancel' aborts previous, 'defer' returns existing promise */
   dedupe?: 'cancel' | 'defer'
+  /**
+   * Abort the previous in-flight request whenever execute() is called again.
+   * Shorthand for `dedupe: 'cancel'`; an explicit `dedupe` option wins.
+   */
+  cancelPrevious?: boolean
   /** Debounce execute calls by this many milliseconds. Mutually exclusive with throttle (debounce wins). */
   debounce?: number
   /** Throttle execute calls to at most once per this many milliseconds. Mutually exclusive with debounce. */
@@ -221,6 +277,8 @@ export interface UseActionReturn<TInput, TOutput> {
   isExecuting: ComputedRef<boolean>
   hasSucceeded: ComputedRef<boolean>
   hasErrored: ComputedRef<boolean>
+  /** Abort the in-flight request without clearing data/error state. */
+  cancel: () => void
   reset: () => void
 }
 
@@ -267,6 +325,8 @@ export interface UseOptimisticActionReturn<TInput, TOutput, TData = TOutput> {
   isExecuting: ComputedRef<boolean>
   hasSucceeded: ComputedRef<boolean>
   hasErrored: ComputedRef<boolean>
+  /** Abort the in-flight request without clearing data/error/optimistic state. */
+  cancel: () => void
   reset: () => void
 }
 
@@ -345,6 +405,8 @@ export interface UseFormActionReturn<TInput, TOutput> {
   fieldErrors: ComputedRef<Record<string, string[]>>
   /** Whether any field has been modified from initial values */
   isDirty: ComputedRef<boolean>
+  /** Abort the in-flight submission without clearing form state. */
+  cancel: () => void
   /** Reset fields to initial values and clear errors */
   reset: () => void
   /** Action status */
@@ -461,4 +523,73 @@ export interface UseStreamActionQueryReturn<TInput, TChunk> {
   fromCache: Readonly<Ref<boolean>>
   /** Clear the cached stream result */
   clearCache: () => void
+}
+
+// ── Global Action Hooks (observability) ─────────────────────────
+
+export interface ActionHookPayload {
+  /** Request path, e.g. '/api/_actions/create-todo' */
+  path: string
+  method: string
+  input: unknown
+}
+
+export interface ActionSuccessHookPayload extends ActionHookPayload {
+  data: unknown
+  durationMs: number
+}
+
+export interface ActionErrorHookPayload extends ActionHookPayload {
+  error: ActionError
+  durationMs: number
+}
+
+export interface ActionSettledHookPayload extends ActionHookPayload {
+  result: ActionResult<unknown>
+  durationMs: number
+}
+
+declare module '#app' {
+  interface RuntimeNuxtHooks {
+    /** Fires when useAction/useOptimisticAction starts a request. */
+    'action:start': (payload: ActionHookPayload) => void | Promise<void>
+    /** Fires after a successful action response. */
+    'action:success': (payload: ActionSuccessHookPayload) => void | Promise<void>
+    /** Fires after a failed action response (not on abort). */
+    'action:error': (payload: ActionErrorHookPayload) => void | Promise<void>
+    /** Fires after every settled action, including aborts. */
+    'action:settled': (payload: ActionSettledHookPayload) => void | Promise<void>
+  }
+}
+
+// ── Idempotency (defineAction option) ────────────────────────────
+
+export interface IdempotencyRecord {
+  /** Stable hash of the original request input — detects key reuse with a different payload. */
+  fingerprint: string
+  result: ActionResult<unknown>
+}
+
+export interface IdempotencyStore {
+  get: (key: string) => Promise<IdempotencyRecord | null | undefined> | IdempotencyRecord | null | undefined
+  set: (key: string, record: IdempotencyRecord, ttlMs: number) => Promise<void> | void
+}
+
+export interface IdempotencyConfig {
+  /** How long a completed result stays replayable, in milliseconds. Default: 86_400_000 (24h) */
+  ttl?: number
+  /** Request header carrying the idempotency key. Default: 'Idempotency-Key' */
+  header?: string
+  /** Reject requests without a key (400 IDEMPOTENCY_KEY_REQUIRED). Default: false */
+  required?: boolean
+  /** Custom key resolver — overrides the header lookup. Return null/undefined for "no key". */
+  key?: (event: H3Event) => string | null | undefined | Promise<string | null | undefined>
+  /**
+   * Identity component mixed into the store key (e.g. the session user id).
+   * Replay happens before middleware/auth runs, so without a scope any client
+   * presenting the same key could replay another client's stored result.
+   */
+  scope?: (event: H3Event) => string | Promise<string>
+  /** Pluggable storage. Default: a per-process in-memory store with TTL pruning. */
+  store?: IdempotencyStore
 }
