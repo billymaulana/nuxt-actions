@@ -36,6 +36,7 @@ interface UseActionOptions<TInput, TOutput> {
   retry?: boolean | number | RetryConfig
   timeout?: number
   dedupe?: 'cancel' | 'defer'
+  cancelPrevious?: boolean
   debounce?: number
   throttle?: number
   /** Transform response data before storing in `data` ref */
@@ -74,10 +75,15 @@ const { execute } = useAction('/api/todos', {
 ```ts
 interface RetryConfig {
   count?: number      // Default: 3
-  delay?: number      // Default: 500ms
+  delay?: number      // Default: 500ms (base delay)
   statusCodes?: number[] // Default: [408, 409, 425, 429, 500, 502, 503, 504]
+  backoff?: 'fixed' | 'linear' | 'exponential' // Default: 'fixed'
+  maxDelay?: number   // Cap for a single retry delay
+  jitter?: boolean    // Randomize within [50%, 100%] of the delay
 }
 ```
+
+With `backoff: 'exponential'` the delay doubles per attempt (`delay * 2^(attempt-1)`); `'linear'` multiplies by the attempt number. `maxDelay` caps the result and `jitter` spreads concurrent retries to avoid thundering herds.
 
 ### `timeout`
 
@@ -96,6 +102,12 @@ const { execute } = useAction('/api/slow-endpoint', {
 - **Type:** `'cancel' | 'defer'`
 - **Required:** No
 - **Description:** Request deduplication strategy for concurrent calls. `'cancel'` aborts the previous in-flight request. `'defer'` returns the existing in-flight promise without starting a new request.
+
+### `cancelPrevious`
+
+- **Type:** `boolean`
+- **Default:** `false`
+- **Description:** Abort the previous in-flight request whenever `execute()` is called again. Shorthand for `dedupe: 'cancel'`; an explicit `dedupe` option wins. Ideal for type-ahead search where a stale response must never overwrite fresher data.
 
 ### `debounce`
 
@@ -174,6 +186,7 @@ interface UseActionReturn<TInput, TOutput> {
   isExecuting: ComputedRef<boolean>
   hasSucceeded: ComputedRef<boolean>
   hasErrored: ComputedRef<boolean>
+  cancel: () => void
   reset: () => void
 }
 ```
@@ -248,6 +261,10 @@ try {
 
 - **Type:** `ComputedRef<boolean>`
 - **Description:** `true` when `status` is `'error'`.
+
+### `cancel()`
+
+Aborts the in-flight request **without** clearing `data`, `error`, or other state. The aborted `execute()` call resolves with an `ABORT_ERROR` result and `status` returns to `'idle'`. A no-op when nothing is in flight.
 
 ### `reset()`
 

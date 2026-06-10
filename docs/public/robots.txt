@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://billymaulana.github.io/nuxt-actions/sitemap.xml

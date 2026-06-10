@@ -505,8 +505,53 @@ const { execute, reset, status, data } = useAction('/api/entries', {
 
 `useAction` does not make a request on mount. If you need to fetch data on page load, consider using Nuxt's built-in `useFetch` or `useAsyncData`. Reserve `useAction` for user-triggered mutations and queries.
 
+## Cancelling Requests
+
+### cancelPrevious
+
+For type-ahead search and rapid filtering, `cancelPrevious: true` aborts the previous in-flight request every time `execute()` is called again -- a stale response can never overwrite fresher data. It is shorthand for `dedupe: 'cancel'` (an explicit `dedupe` option wins):
+
+```ts
+const search = useAction(searchTodos, { cancelPrevious: true, debounce: 150 })
+```
+
+### cancel()
+
+`cancel()` aborts the in-flight request **without** clearing `data`/`error` state (unlike `reset()`, which aborts and wipes everything). The aborted call resolves with an `ABORT_ERROR` result and status returns to `idle`:
+
+```ts
+const { execute, cancel, data } = useAction(searchTodos)
+
+execute({ q: 'nuxt' })
+cancel() /* data keeps its previous value */
+```
+
+## Retry with Backoff
+
+The `retry` object accepts growth strategies for flaky networks. Delays can grow per attempt, get capped, and be jittered to avoid thundering-herd retries:
+
+```ts
+const { execute } = useAction(syncOrders, {
+  retry: {
+    count: 4,
+    delay: 300,            // base delay
+    backoff: 'exponential', // 300ms, 600ms, 1200ms, 2400ms
+    maxDelay: 5000,         // cap each delay
+    jitter: true,           // randomize within [50%, 100%]
+    statusCodes: [502, 503, 504],
+  },
+})
+```
+
+`backoff: 'linear'` grows arithmetically (300, 600, 900, ...); the default `'fixed'` keeps the base delay.
+
+::: warning ofetch version requirement
+`backoff`, `maxDelay`, and `jitter` rely on ofetch >= 1.4 (bundled with Nuxt 3.13+). On older Nuxt 3.x runtimes these options silently fall back to ofetch's own delay handling — plain `delay` works everywhere.
+:::
+
 ## Next Steps
 
 - [Optimistic Updates](/guide/optimistic-updates) -- Instant UI feedback with `useOptimisticAction`
 - [Error Handling](/guide/error-handling) -- Detailed error handling patterns
+- [Observability](/guide/observability) -- Global hooks for every action call
 - [useAction API](/api/use-action) -- Full API reference

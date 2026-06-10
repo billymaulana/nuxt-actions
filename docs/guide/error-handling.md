@@ -162,7 +162,8 @@ The module produces errors from several sources. Understanding these categories 
 | `PARSE_ERROR` | 400 | Request body | Malformed JSON in the request body. |
 | `INTERNAL_ERROR` | 500 | Unhandled throw | An unexpected error occurred in the handler. |
 | `SERVER_ERROR` | varies | H3 `createError` | An H3 error was thrown (from Nuxt utilities). |
-| `FETCH_ERROR` | 500 | Network | Client-side: the HTTP request itself failed (network error, timeout). |
+| `FETCH_ERROR` | 0 | Network | Client-side: the HTTP request itself failed (no HTTP response received). |
+| `TIMEOUT_ERROR` | 408 | Network | Client-side: the request exceeded the configured `timeout`. |
 | Custom codes | Custom | Your code | Any error you create with `createActionError`. |
 
 ## Security: Internal Errors Are Never Leaked
@@ -472,8 +473,48 @@ export function useAuthAction<TInput, TOutput>(
 }
 ```
 
+## Typed Error Codes
+
+`error.code` is typed as `ActionErrorCode` -- an open union of every built-in code with autocomplete, while custom codes thrown via `createActionError` keep working:
+
+```ts
+import type { ActionErrorCode } from 'nuxt-actions/types'
+
+function describe(code: ActionErrorCode): string {
+  switch (code) {
+    case 'VALIDATION_ERROR': return 'Check the highlighted fields'
+    case 'UNAUTHORIZED': return 'Please sign in'
+    case 'RATE_LIMIT': return 'Slow down a little'
+    case 'IDEMPOTENCY_KEY_REUSE': return 'This operation was already submitted'
+    default: return 'Something went wrong'
+  }
+}
+```
+
+Built-in codes: `VALIDATION_ERROR`, `OUTPUT_VALIDATION_ERROR`, `PARSE_ERROR`, `UNAUTHORIZED`, `RATE_LIMIT`, `CSRF_ERROR`, `IDEMPOTENCY_KEY_REQUIRED`, `IDEMPOTENCY_KEY_REUSE`, `SERVER_ERROR`, `INTERNAL_ERROR`, `FETCH_ERROR`, `ABORT_ERROR`, `TIMEOUT_ERROR`, `STREAM_ERROR`.
+
+## Narrowing Unknown Errors on the Client
+
+`isActionError` is auto-imported in components and composables -- the same guard the server uses, for narrowing `unknown` values from `executeAsync` rejections or shared error handlers:
+
+```ts
+try {
+  await executeAsync({ id })
+}
+catch (err) {
+  if (isActionError(err)) {
+    if (err.code === 'UNAUTHORIZED') return navigateTo('/login')
+    toast.error(err.message)
+  }
+  else {
+    throw err
+  }
+}
+```
+
 ## Next Steps
 
 - [useAction](/guide/use-action) -- Full client composable documentation
 - [Middleware](/guide/middleware) -- How errors interact with the middleware chain
+- [Observability](/guide/observability) -- Handle every action error in one global hook
 - [createActionError API](/api/create-action-error) -- Full API reference

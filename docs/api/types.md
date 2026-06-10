@@ -142,6 +142,29 @@ type ActionStatus = 'idle' | 'executing' | 'success' | 'error'
 | `'success'` | The most recent execution completed successfully. |
 | `'error'` | The most recent execution failed. |
 
+### ActionErrorCode
+
+Open union of every built-in error code. Custom codes remain assignable while built-in ones get autocomplete.
+
+```ts
+type ActionErrorCode
+  = | 'VALIDATION_ERROR'
+    | 'OUTPUT_VALIDATION_ERROR'
+    | 'PARSE_ERROR'
+    | 'UNAUTHORIZED'
+    | 'RATE_LIMIT'
+    | 'CSRF_ERROR'
+    | 'IDEMPOTENCY_KEY_REQUIRED'
+    | 'IDEMPOTENCY_KEY_REUSE'
+    | 'SERVER_ERROR'
+    | 'INTERNAL_ERROR'
+    | 'FETCH_ERROR'
+    | 'ABORT_ERROR'
+    | 'TIMEOUT_ERROR'
+    | 'STREAM_ERROR'
+    | (string & {})
+```
+
 ### ActionError
 
 A structured error object returned by failed actions.
@@ -149,7 +172,7 @@ A structured error object returned by failed actions.
 ```ts
 interface ActionError {
   /** Machine-readable error code (e.g., 'VALIDATION_ERROR', 'NOT_FOUND'). */
-  code: string
+  code: ActionErrorCode
   /** Human-readable error message. */
   message: string
   /** Per-field error messages, keyed by field name or dot-separated path. */
@@ -311,6 +334,8 @@ interface ActionOptions<
   middleware?: ActionMiddleware[]
   /** Metadata for logging/analytics. */
   metadata?: ActionMetadata
+  /** Replay protection keyed by the Idempotency-Key header. */
+  idempotency?: IdempotencyConfig
   /** The action handler function. */
   handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>
 }
@@ -401,10 +426,14 @@ interface UseActionOptions<TInput, TOutput> {
   timeout?: number
   /** Request deduplication strategy. 'cancel' aborts previous, 'defer' returns existing promise. */
   dedupe?: 'cancel' | 'defer'
+  /** Abort the previous in-flight request on every execute(). Shorthand for dedupe: 'cancel'. */
+  cancelPrevious?: boolean
   /** Debounce delay in ms. Last-call-wins. Takes priority over throttle. */
   debounce?: number
   /** Throttle interval in ms. First call immediate, trailing call fired. Ignored if debounce is set. */
   throttle?: number
+  /** Transform response data before storing in the data ref. */
+  transform?: (data: TOutput) => TOutput
   /** Called when the server returns a successful result. */
   onSuccess?: (data: TOutput) => void
   /** Called when the server returns an error or a fetch error occurs. */
@@ -441,6 +470,8 @@ interface UseActionReturn<TInput, TOutput> {
   /** Computed: true when status is 'error'. */
   hasErrored: ComputedRef<boolean>
   /** Reset data, error, and status to initial values. Aborts any in-flight request. */
+  /** Abort the in-flight request without clearing state. */
+  cancel: () => void
   reset: () => void
 }
 ```
@@ -512,6 +543,8 @@ interface UseOptimisticActionReturn<TInput, TOutput> {
   /** Computed: true when status is 'error'. */
   hasErrored: ComputedRef<boolean>
   /** Reset optimisticData to currentData, and data/error/status to initial values. */
+  /** Abort the in-flight request without clearing state. */
+  cancel: () => void
   reset: () => void
 }
 ```
@@ -656,6 +689,8 @@ interface UseFormActionReturn<TInput, TOutput> {
   /** Whether a submission is currently in flight. */
   isSubmitting: ComputedRef<boolean>
   /** Reset fields to initial values and clear errors. */
+  /** Abort the in-flight request without clearing state. */
+  cancel: () => void
   reset: () => void
   /** Reactive reference to the last successful response data. */
   data: Readonly<Ref<TOutput | null>>
@@ -678,10 +713,16 @@ Full retry configuration object.
 interface RetryConfig {
   /** Number of retry attempts. Default: 3 */
   count?: number
-  /** Delay between retries in milliseconds. Default: 500 */
+  /** Base delay between retries in milliseconds. Default: 500 */
   delay?: number
   /** HTTP status codes to retry on. Default: [408, 409, 425, 429, 500, 502, 503, 504] */
   statusCodes?: number[]
+  /** Delay growth strategy: 'fixed' (default), 'linear', or 'exponential'. */
+  backoff?: 'fixed' | 'linear' | 'exponential'
+  /** Upper bound for a single retry delay in milliseconds. */
+  maxDelay?: number
+  /** Randomize each delay within [50%, 100%] of the computed value. Default: false */
+  jitter?: boolean
 }
 ```
 
@@ -724,6 +765,72 @@ import type {
 } from 'nuxt-actions/runtime/types'
 ```
 
+## Idempotency
+
+### IdempotencyConfig
+
+Configuration for the `idempotency` option on `defineAction` / `.idempotency()` on the builder.
+
+```ts
+interface IdempotencyConfig {
+  /** How long a completed result stays replayable, in ms. Default: 86_400_000 (24h) */
+  ttl?: number
+  /** Request header carrying the idempotency key. Default: 'Idempotency-Key' */
+  header?: string
+  /** Reject requests without a key (400 IDEMPOTENCY_KEY_REQUIRED). Default: false */
+  required?: boolean
+  /** Custom key resolver — overrides the header lookup. */
+  key?: (event: H3Event) => string | null | undefined | Promise<string | null | undefined>
+  /** Identity mixed into the store key (e.g. user id) — replay skips middleware/auth. */
+  scope?: (event: H3Event) => string | Promise<string>
+  /** Pluggable storage. Default: bounded per-process in-memory store. */
+  store?: IdempotencyStore
+}
+```
+
+### IdempotencyStore / IdempotencyRecord
+
+```ts
+interface IdempotencyRecord {
+  /** Stable hash of the original request input. */
+  fingerprint: string
+  result: ActionResult<unknown>
+}
+
+interface IdempotencyStore {
+  get: (key: string) => Promise<IdempotencyRecord | null | undefined> | IdempotencyRecord | null | undefined
+  set: (key: string, record: IdempotencyRecord, ttlMs: number) => Promise<void> | void
+}
+```
+
+## Global Hook Payloads
+
+Payloads for the `action:start` / `action:success` / `action:error` / `action:settled` runtime hooks. The module augments Nuxt's `RuntimeNuxtHooks`, so `nuxtApp.hook('action:success', ...)` is fully typed.
+
+```ts
+interface ActionHookPayload {
+  /** Request path, e.g. '/api/_actions/create-todo' */
+  path: string
+  method: string
+  input: unknown
+}
+
+interface ActionSuccessHookPayload extends ActionHookPayload {
+  data: unknown
+  durationMs: number
+}
+
+interface ActionErrorHookPayload extends ActionHookPayload {
+  error: ActionError
+  durationMs: number
+}
+
+interface ActionSettledHookPayload extends ActionHookPayload {
+  result: ActionResult<unknown>
+  durationMs: number
+}
+```
+
 ## See Also
 
 - [defineAction](/api/define-action) -- Server action definition
@@ -736,3 +843,4 @@ import type {
 - [useStreamAction](/api/use-stream-action) -- Streaming composable
 - [useActionQuery](/api/use-action-query) -- SSR query composable
 - [Cache Invalidation](/api/invalidate-actions) -- Refetch or clear query caches
+- [Idempotency](/api/idempotency) -- Replay protection configuration

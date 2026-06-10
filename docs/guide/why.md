@@ -73,6 +73,37 @@ await execute({ title: 'Buy milk' })
 
 That is the entire implementation -- server and client. You get validated input, typed handler parameters, a consistent error format, and reactive state management.
 
+## How a Request Flows
+
+Every action call follows the same pipeline. There is no protocol layer and no client to configure -- it is a regular Nitro HTTP request with validation, middleware, and typing built in:
+
+```
+ Vue Component
+      │  execute(input)            reactive state: data / error / status
+      ▼
+ useAction() ───────────── retry · dedupe · debounce · abort · transform
+      │  $fetch (HTTP POST/GET)
+      ▼
+ /api/_actions/<name> ──── generated Nitro route
+      │
+      ▼
+ middleware chain ───────── auth · rate limit · CSRF · custom (typed ctx)
+      │  next({ ctx })
+      ▼
+ input schema ───────────── Standard Schema validation (Zod/Valibot/ArkType)
+      │  typed input
+      ▼
+ handler({ input, ctx }) ── your business logic
+      │
+      ▼
+ output schema (optional) ─ response validation
+      │
+      ▼
+ ActionResult envelope ──── { success, data } | { success, error }
+```
+
+Because the boundary is plain HTTP, every action also works with `curl`, Postman, OpenAPI tooling, and any non-Nuxt client.
+
 ## What You Get
 
 - **Automatic input validation** with field-level errors, powered by any [Standard Schema](/guide/standard-schema) library
@@ -132,6 +163,18 @@ tRPC also depends on Zod specifically for validation. `nuxt-actions` accepts any
 ### vs nuxt-server-fn
 
 [nuxt-server-fn](https://github.com/antfu/nuxt-server-fn) (282 stars) by Anthony Fu lets you call server functions from the client as if they were local. It is a clean, minimal idea but has not been updated since its initial release. There is no input validation, no middleware, no optimistic updates, and no error standardization.
+
+## Is This a Replacement For...?
+
+If you arrive from another ecosystem, here is where `nuxt-actions` sits relative to the tools you already know:
+
+**...raw `$fetch` / `useFetch`?** For mutations, yes. `$fetch` gives you a typed HTTP call and nothing else -- validation, error shape, retry, dedupe, cancellation, and loading state are all yours to rebuild per call site. `nuxt-actions` ships those once, server and client, while still using `$fetch` underneath. For pure reads that never mutate, keep using `useFetch`/`useAsyncData`.
+
+**...tRPC?** It solves the same end-to-end typing problem without introducing a protocol. There is no router definition, no client setup, and no custom wire format -- actions are plain Nitro routes you can hit with `curl`, and types flow through the generated `#actions` module instead of a procedure tree. The trade-off: tRPC is framework-agnostic, `nuxt-actions` is deliberately Nuxt-native.
+
+**...React/Next Server Actions?** Same concept -- typed server mutations callable from components -- adapted to Nuxt. Two deliberate differences: the HTTP boundary is explicit (inspectable, cacheable, OpenAPI-documentable) rather than compiler magic, and failures return a discriminated `{ success, error }` envelope instead of thrown exceptions you must catch.
+
+**...TanStack Query?** Complementary, not competing. TanStack Query is a client-side cache manager; `nuxt-actions` is the typed server-action layer with lightweight query/invalidation helpers built on Nuxt's own `useAsyncData` cache. If you need normalized caches and offline persistence, run TanStack Query on top of action calls. For most Nuxt apps, `useActionQuery` + `useActionMutation` cover the read-invalidate loop without another dependency.
 
 ## When to Use nuxt-actions
 
