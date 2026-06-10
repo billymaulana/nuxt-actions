@@ -6,5 +6,5 @@ export default createActionClient()
     return id ? { id, name: `User ${id}` } : null
   }))
   .action(async ({ ctx }) => {
-    return { user: (ctx as { user: unknown }).user }
+    return { user: ctx.user }
   })

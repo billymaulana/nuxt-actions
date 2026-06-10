@@ -34,7 +34,7 @@ async function addTodo() {
     </p>
     <ul>
       <li
-        v-for="todo in todos"
+        v-for="todo in todos?.items ?? []"
         :key="todo.id"
       >
         {{ todo.title }}
