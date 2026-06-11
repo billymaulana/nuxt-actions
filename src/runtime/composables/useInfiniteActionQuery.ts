@@ -90,7 +90,7 @@ export function useInfiniteActionQuery(
   // ── State ────────────────────────────────────────────────────────
   /* Pages 2+ fetched on the client; page 1 is derived from useAsyncData. */
   const extraPages = ref<unknown[]>([])
-  const error = ref<ActionError | null>(null)
+  const fetchNextError = ref<ActionError | null>(null)
   const isFetchingNextPage = ref(false)
   /* Bumped by refresh()/clear()/dispose so an in-flight fetchNextPage can detect it raced a reset. */
   let generation = 0
@@ -140,12 +140,22 @@ export function useInfiniteActionQuery(
    * whenever the template renders it.
    */
   // ── pages: first page + client-fetched extras ────────────────────
+  /* A user transform that throws must degrade gracefully, not crash render. */
+  function applyTransform(value: unknown): unknown {
+    if (!options.transform) return value
+    try {
+      return options.transform(value as never)
+    }
+    catch {
+      return value
+    }
+  }
+
   const pages = computed<unknown[]>(() => {
     const raw = asyncData.data.value
     /* Gate on the success flag, not the data value — a successful page whose data is undefined still counts. */
     if (raw?.success !== true) return []
-    const firstPage = options.transform ? options.transform(raw.data as never) : raw.data
-    return [firstPage, ...extraPages.value]
+    return [applyTransform(raw.data), ...extraPages.value]
   })
 
   // Watch enabled — trigger fetch when reactive ref becomes true
@@ -159,6 +169,17 @@ export function useInfiniteActionQuery(
   const data = computed(() => {
     const all = pages.value
     return all.length === 0 ? null : all[all.length - 1]
+  })
+
+  /*
+   * Surface the first-page envelope error too: a {success:false} action resolves
+   * HTTP 200, so useAsyncData stays "success" — without this the failure would be
+   * silently swallowed. A fetchNextPage error takes precedence (it is newer).
+   */
+  const error = computed<ActionError | null>(() => {
+    if (fetchNextError.value) return fetchNextError.value
+    const raw = asyncData.data.value
+    return raw && raw.success === false ? raw.error : null
   })
 
   // ── nextPageParam / hasNextPage (reactively derived) ─────────────
@@ -181,7 +202,7 @@ export function useInfiniteActionQuery(
 
     const startGeneration = generation
     isFetchingNextPage.value = true
-    error.value = null
+    fetchNextError.value = null
 
     try {
       const result = await appFetch<ActionResult<unknown>>(
@@ -197,12 +218,12 @@ export function useInfiniteActionQuery(
         extraPages.value = [...extraPages.value, pageData]
       }
       else {
-        error.value = result.error
+        fetchNextError.value = result.error
       }
     }
     catch (err: unknown) {
       if (generation !== startGeneration) return
-      error.value = {
+      fetchNextError.value = {
         code: 'FETCH_ERROR',
         message: err instanceof Error ? err.message : 'Failed to fetch next page',
         statusCode: 0,
@@ -217,7 +238,7 @@ export function useInfiniteActionQuery(
   async function refresh(): Promise<void> {
     generation++
     extraPages.value = []
-    error.value = null
+    fetchNextError.value = null
     isFetchingNextPage.value = false
     await asyncData.refresh()
   }
@@ -226,7 +247,7 @@ export function useInfiniteActionQuery(
   function clear(): void {
     generation++
     extraPages.value = []
-    error.value = null
+    fetchNextError.value = null
     isFetchingNextPage.value = false
     asyncData.clear()
   }

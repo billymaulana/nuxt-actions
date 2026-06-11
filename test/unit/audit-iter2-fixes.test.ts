@@ -197,6 +197,74 @@ describe('iter2: useInfiniteActionQuery fetchNextPage races refresh()', () => {
   })
 })
 
+describe('iter3: useInfiniteActionQuery surfaces a first-page envelope error', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('a {success:false} first page exposes error (not silently swallowed)', async () => {
+    mockFetch.mockResolvedValue({ success: false, error: { code: 'FORBIDDEN', message: 'no', statusCode: 403 } })
+    const { pages, data, error } = useInfiniteActionQuery(actionRef('list'), undefined, {
+      getNextPageParam: () => undefined,
+    })
+    await flush()
+
+    expect(pages.value).toHaveLength(0)
+    expect(data.value).toBeNull()
+    expect(error.value).toEqual({ code: 'FORBIDDEN', message: 'no', statusCode: 403 })
+  })
+})
+
+describe('iter3: a throwing first-page transform degrades gracefully', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('does not crash render; pages falls back to raw data', async () => {
+    mockFetch.mockResolvedValue({ success: true, data: { raw: true } })
+    const { pages, data } = useInfiniteActionQuery(actionRef('list'), undefined, {
+      getNextPageParam: () => undefined,
+      transform: () => { throw new Error('bad transform') },
+    })
+    await flush()
+
+    expect(() => pages.value).not.toThrow()
+    expect(() => data.value).not.toThrow()
+    expect(data.value).toEqual({ raw: true }) // degraded to untransformed
+  })
+})
+
+describe('iter3: useOptimisticAction superseded timeout does not clobber the latest', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('a timed-out call superseded before its catch runs leaves the latest call clean', async () => {
+    vi.useFakeTimers()
+    // A: hangs until its timeout aborts it. B: resolves success.
+    mockFetch
+      .mockImplementationOnce((_p: string, opts: { signal: AbortSignal }) =>
+        new Promise((_r, reject) => {
+          opts.signal.addEventListener('abort', () => setTimeout(() => reject(Object.assign(new Error('a'), { name: 'FetchError', cause: new DOMException('a', 'AbortError') })), 1))
+        }),
+      )
+      .mockResolvedValueOnce({ success: true, data: { v: 'B' } })
+
+    const src = ref({ v: 'init' })
+    const action = useOptimisticAction('/api/x', {
+      timeout: 20,
+      currentData: src,
+      updateFn: (input: { v: string }) => ({ v: input.v }),
+    })
+
+    const pA = action.execute({ v: 'A' })
+    vi.advanceTimersByTime(20) // A's timeout fires (timedOut, abort) — catch not yet run
+    const pB = action.execute({ v: 'B' }) // B supersedes A before A's catch drains
+    await vi.advanceTimersByTimeAsync(5)
+    await Promise.all([pA, pB])
+
+    // Final state must be fully B's — no stale TIMEOUT_ERROR, no reverted optimistic
+    expect(action.status.value).toBe('success')
+    expect(action.error.value).toBeNull()
+    expect(action.optimisticData.value).toEqual({ v: 'B' })
+    vi.useRealTimers()
+  })
+})
+
 describe('iter2: getNextPageParam that throws degrades to no-next-page', () => {
   beforeEach(() => vi.clearAllMocks())
 

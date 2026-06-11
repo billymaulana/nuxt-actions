@@ -23,7 +23,11 @@ function composeStoreKey(path: string, scope: string, rawKey: string): string {
   return JSON.stringify([path.split('?')[0], scope, rawKey])
 }
 
-/** Constant-size, collision-free fingerprint of the request input. */
+/**
+ * Constant-size fingerprint of the request input: SHA-256 of a deterministic
+ * serialization. JSON inputs are effectively collision-free; binary payloads
+ * are summarized via a 64-bit digest (~2^32 birthday bound), not byte-exact.
+ */
 function fingerprintOf(rawInput: unknown): string {
   return createHash('sha256').update(stableStringify(rawInput)).digest('hex')
 }

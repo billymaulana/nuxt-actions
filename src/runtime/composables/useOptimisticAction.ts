@@ -177,18 +177,20 @@ export function useOptimisticAction(
       if (timedOut || isAbortRejection(err, controller.signal)) {
         if (timedOut) {
           /*
-           * A timeout means THIS call's own timer fired. A superseded call is
-           * aborted by the newer execute(), which clears this timer, so a timed-
-           * out call is always still the latest — no isLatest guard needed.
+           * The timer fires asynchronously, so a newer call can supersede this
+           * one between the timer firing and this catch running — guard the
+           * shared writes so a stale timeout can't clobber the latest call.
            */
           const timeoutError: ActionError = {
             code: 'TIMEOUT_ERROR',
             message: `Request timed out after ${options.timeout}ms`,
             statusCode: 408,
           }
-          optimisticData.value = snapshot
-          error.value = timeoutError
-          status.value = 'error'
+          if (isLatest()) {
+            optimisticData.value = snapshot
+            error.value = timeoutError
+            status.value = 'error'
+          }
           const result: ActionResult<unknown> = { success: false, error: timeoutError }
           options.onError?.(timeoutError)
           options.onSettled?.(result)
