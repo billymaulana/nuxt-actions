@@ -91,6 +91,11 @@
       "optional": true
     }
   },
+  "pnpm": {
+    "overrides": {
+      "vitepress>vite": "^6.4.2"
+    }
+  },
   "devDependencies": {
     "@nuxt/devtools": "^3.2.4",
     "@nuxt/eslint-config": "^1.15.2",
