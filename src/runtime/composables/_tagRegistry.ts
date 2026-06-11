@@ -1,5 +1,6 @@
 import { useNuxtApp } from '#app'
 
+/* Indexed tag -> keys so a mutation resolves affected keys in O(matching keys), not O(all keys x tags). */
 type Registry = Map<string, Set<string>>
 
 function getRegistry(): Registry {
@@ -10,22 +11,33 @@ function getRegistry(): Registry {
 export function registerTags(key: string, tags: string[]): void {
   if (tags.length === 0) return
   const registry = getRegistry()
-  const existing = registry.get(key) ?? new Set<string>()
-  for (const tag of tags) existing.add(tag)
-  registry.set(key, existing)
+  for (const tag of tags) {
+    const keys = registry.get(tag) ?? new Set<string>()
+    keys.add(key)
+    registry.set(tag, keys)
+  }
+}
+
+export function unregisterTags(key: string, tags: string[]): void {
+  if (tags.length === 0) return
+  const registry = getRegistry()
+  for (const tag of tags) {
+    const keys = registry.get(tag)
+    if (!keys) continue
+    keys.delete(key)
+    if (keys.size === 0) registry.delete(tag)
+  }
 }
 
 export function keysForTags(tags: string[]): string[] {
   if (tags.length === 0) return []
-  const wanted = new Set(tags)
-  const keys: string[] = []
-  for (const [key, keyTags] of getRegistry()) {
-    for (const tag of keyTags) {
-      if (wanted.has(tag)) {
-        keys.push(key)
-        break
-      }
+  const registry = getRegistry()
+  const out = new Set<string>()
+  for (const tag of tags) {
+    const keys = registry.get(tag)
+    if (keys) {
+      for (const key of keys) out.add(key)
     }
   }
-  return keys
+  return [...out]
 }

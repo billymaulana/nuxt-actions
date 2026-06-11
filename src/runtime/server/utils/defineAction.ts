@@ -8,7 +8,9 @@ import type {
   ActionError,
   ActionMetadata,
   ActionResult,
+  IdempotencyConfig,
 } from '../../types'
+import { executeWithIdempotency } from './idempotency'
 
 interface DefineActionOptions<
   TInputSchema extends StandardSchemaV1,
@@ -24,6 +26,12 @@ interface DefineActionOptions<
   middleware?: ActionMiddleware[]
   /** Metadata for logging/analytics */
   metadata?: ActionMetadata
+  /**
+   * Replay protection keyed by the Idempotency-Key header. Successful results
+   * are stored and replayed for duplicate requests instead of re-running the
+   * handler. See IdempotencyConfig for TTL, custom keys, and storage.
+   */
+  idempotency?: IdempotencyConfig
   /** Custom server error handler */
   handleServerError?: (error: Error) => { code: string, message: string, statusCode?: number }
   /** The action handler function */
@@ -65,6 +73,18 @@ export function defineAction<
   type TInput = TInputSchema extends StandardSchemaV1<infer I, unknown> ? I : unknown
 
   async function _execute(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
+    if (options.idempotency) {
+      return executeWithIdempotency(
+        event,
+        rawInput,
+        options.idempotency,
+        () => _run(rawInput, event),
+      ) as Promise<ActionResult<TOutput>>
+    }
+    return _run(rawInput, event)
+  }
+
+  async function _run(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
     try {
       // 1. Validate input with Standard Schema
       let input = rawInput

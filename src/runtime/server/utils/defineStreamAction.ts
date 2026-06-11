@@ -10,10 +10,15 @@ import type {
 import { formatStandardIssues, runMiddleware, isActionError } from './defineAction'
 
 interface StreamActionSender<TChunk = unknown> {
-  /** Send a data chunk to the client */
+  /** Send a data chunk to the client (no-op once the stream is closed). */
   send: (data: TChunk) => Promise<void>
   /** Close the stream */
   close: () => Promise<void>
+  /**
+   * Aborts when the client disconnects or the stream closes. Await it (or
+   * check `signal.aborted`) to stop expensive work for a gone client.
+   */
+  signal: AbortSignal
 }
 
 interface DefineStreamActionOptions<
@@ -106,14 +111,30 @@ export function defineStreamAction<
         ctx = await runMiddleware(event, options.middleware, options.metadata ?? {}) as TCtx
       }
 
-      // 4. Create event stream
+      // 4. Create event stream + client-disconnect detection
       const eventStream: EventStream = createEventStream(event)
+      const abort = new AbortController()
+      let closed = false
+      /*
+       * onClosed fires on client disconnect AND on our own close(), so the
+       * signal means "stop work" in both cases. Without this the handler runs
+       * to completion for a gone client (and subscription/while-true handlers
+       * never terminate, leaking one closure per abandoned stream).
+       */
+      eventStream.onClosed(() => {
+        closed = true
+        abort.abort()
+      })
 
       const streamSender: StreamActionSender<TChunk> = {
+        signal: abort.signal,
         send: async (data: TChunk) => {
+          if (closed) return
           await eventStream.push(JSON.stringify(data))
         },
         close: async () => {
+          if (closed) return
+          closed = true
           // Send a done event before closing
           await eventStream.push(JSON.stringify({ __actions_done: true }))
           await eventStream.close()

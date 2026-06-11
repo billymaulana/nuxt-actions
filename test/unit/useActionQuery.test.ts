@@ -421,7 +421,7 @@ describe('useActionQuery', () => {
   })
 
   describe('refetchInterval option', () => {
-    it('calls setInterval when refetchInterval is provided', () => {
+    it('does not start the polling interval on the server (import.meta.client is falsy)', () => {
       vi.useFakeTimers()
       mockFetch.mockReturnValue(new Promise(() => {}))
 
@@ -429,12 +429,12 @@ describe('useActionQuery', () => {
         refetchInterval: 3000,
       })
 
-      // Advance timers to trigger the interval
-      vi.advanceTimersByTime(3000)
-      expect(mockRefresh).toHaveBeenCalledTimes(1)
-
-      vi.advanceTimersByTime(3000)
-      expect(mockRefresh).toHaveBeenCalledTimes(2)
+      /*
+       * In the node test env import.meta.client is falsy, mirroring SSR — the
+       * interval must NOT start, otherwise it would leak per server request.
+       */
+      vi.advanceTimersByTime(9000)
+      expect(mockRefresh).not.toHaveBeenCalled()
 
       vi.useRealTimers()
     })

@@ -47,16 +47,25 @@ interface RateLimitEntry {
  * ```
  */
 export function rateLimitMiddleware(config: RateLimitConfig): ActionMiddleware {
-  const { limit, window: windowMs = 60_000, message = 'Too many requests' } = config
+  const { limit, window: windowMs = 60_000, message = 'Too many requests', maxEntries = 100_000 } = config
   const store = new Map<string, RateLimitEntry>()
+  let lastSweep = 0
 
   return async ({ event, next }) => {
     const now = Date.now()
 
-    // Prune expired entries to prevent memory leaks
-    for (const [key, entry] of store) {
-      if (now >= entry.resetAt) {
-        store.delete(key)
+    /*
+     * Correctness rests on per-key lazy expiry below, so the global sweep is
+     * pure housekeeping. Running it on every request makes each request O(n)
+     * in tracked keys — a CPU-exhaustion vector under a spoofed-key flood.
+     * Amortize it to at most once per window instead.
+     */
+    if (now - lastSweep >= windowMs) {
+      lastSweep = now
+      for (const [key, entry] of store) {
+        if (now >= entry.resetAt) {
+          store.delete(key)
+        }
       }
     }
 
@@ -67,26 +76,28 @@ export function rateLimitMiddleware(config: RateLimitConfig): ActionMiddleware {
 
     const entry = store.get(key)
 
-    if (entry) {
-      // Window still active
-      if (now < entry.resetAt) {
-        entry.count++
-        if (entry.count > limit) {
-          throw createActionError({
-            code: 'RATE_LIMIT',
-            message,
-            statusCode: 429,
-          })
-        }
-      }
-      else {
-        // Window expired — start a new window
-        store.set(key, { count: 1, resetAt: now + windowMs })
+    if (entry && now < entry.resetAt) {
+      // Window still active — count toward the limit (lazy expiry)
+      entry.count++
+      if (entry.count > limit) {
+        throw createActionError({
+          code: 'RATE_LIMIT',
+          message,
+          statusCode: 429,
+        })
       }
     }
     else {
-      // First request for this key
+      // First request, or the previous window expired — start a fresh window
       store.set(key, { count: 1, resetAt: now + windowMs })
+      /*
+       * Bound memory between sweeps: evict oldest (insertion-order) keys when
+       * a flood grows the store past the cap.
+       */
+      while (store.size > maxEntries) {
+        const oldest = store.keys().next().value as string
+        store.delete(oldest)
+      }
     }
 
     return next()

@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.3.0 (2026-06-11)
+
+### Features
+
+- **Idempotency** — `defineAction({ idempotency })` and `createActionClient().idempotency()` replay a stored result for duplicate `Idempotency-Key` requests (Stripe-style semantics): same key + same payload replays without re-running the handler, a different payload returns `422 IDEMPOTENCY_KEY_REUSE`, concurrent duplicates await the in-flight execution, and failures stay retryable. Keys are scopable per identity via `scope` (recommended: session user id, since replay skips middleware), storage is pluggable via `IdempotencyStore` (bounded in-memory default; `createMemoryIdempotencyStore` exported), and store outages degrade gracefully (best-effort persistence, binary inputs fingerprinted by digest).
+- **Global action hooks** — `action:start`, `action:success`, `action:error`, and `action:settled` fire on `nuxtApp` for every `useAction`/`useOptimisticAction` call (and the composables built on them), with typed payloads including `durationMs`. Fire-and-forget: a slow or throwing hook never affects the action.
+- **Retry backoff** — `retry: { backoff: 'exponential' | 'linear', maxDelay, jitter }` grows delays per attempt, caps them, and randomizes within [50%, 100%] to avoid thundering-herd retries. The default stays flat.
+- **`cancelPrevious` + `cancel()`** — `cancelPrevious: true` on `useAction`/`useFormAction` is shorthand for `dedupe: 'cancel'` (type-ahead search), and the new `cancel()` method — available on `useAction`, `useOptimisticAction`, and `useFormAction` — aborts the in-flight request without clearing state (unlike `reset()`). `useOptimisticAction` always cancels the previous request. Abort detection now keys off the owned AbortController signal, and the `timeout` option is enforced client-side (`TIMEOUT_ERROR`, 408) since ofetch ignores its timeout when an external signal is set.
+- **Typed error codes** — `ActionError.code` is now the open union `ActionErrorCode` (all built-in codes with autocomplete, custom codes still assignable), and `isActionError` is auto-imported client-side for narrowing unknown errors.
+- **Grouped `actions` namespace** — `#actions` additionally exports one `actions` object mirroring the directory structure: `actions.auth.login` is the same typed reference as the flat `authLogin`. Collisions warn at build time and fall back to flat exports.
+
+### Hardening (production-readiness audit)
+
+- **SSR polling leak fixed** — `useActionQuery({ refetchInterval })` no longer starts its interval on the server, where the effect scope is never disposed (it leaked one timer per request and re-invoked the action forever).
+- **No hydration mismatch in infinite queries** — `useInfiniteActionQuery` now derives the first page from `useAsyncData` at render time instead of via an immediate watcher Vue stops during SSR, so the first page renders in the server HTML. `hasNextPage`/`nextPageParam` are now reactively derived.
+- **Stale responses never clobber newer state** — overlapping `useAction` calls (default concurrent) only let the latest call write `data`/`error`/`status`; `cancel()`/`reset()` now abort every in-flight request, not just the most recent.
+- **Timeout settles immediately** — the `timeout` deadline now races the request, so it settles at the deadline instead of waiting out an in-progress retry-backoff sleep; the abort also stops ofetch's retry loop.
+- **`cancel()` never throws** — cancelling a debounced/throttled call now settles pending callers with an `ABORT_ERROR` result instead of rejecting, keeping the documented "never throws" contract.
+- **Idempotency races closed** — the in-flight claim is registered before the async store read (no double-run with shared/async stores), store keys are composed injectively (a client key can't collide across `scope`s), and fingerprints are stored as a constant-size SHA-256 digest.
+- **Rate limiter is flood-resistant** — the per-request full-store prune is amortized to once per window (O(1) amortized) and the store is size-capped, removing an unauthenticated CPU/memory-exhaustion vector under spoofed-key floods.
+- **Streaming detects disconnect** — `defineStreamAction` handlers receive `stream.signal`, which aborts when the client disconnects, so long-running handlers can stop instead of running to completion for a gone client.
+- **Smart-cache lookup is O(matching keys)** — the tag registry is indexed tag → keys, so a mutation resolves affected queries without scanning every registered key.
+- **OpenAPI document is built once** and cached per process; colocated action HMR no longer force-restarts the dev server every change.
+
 ## v1.2.0 (2026-06-10)
 
 ### Bug Fixes

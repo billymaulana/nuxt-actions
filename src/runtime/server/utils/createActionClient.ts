@@ -1,11 +1,14 @@
 import type {
   StandardSchemaV1,
+  InferInput,
   InferOutput,
   ActionMiddleware,
   ActionHandler,
   ActionMetadata,
   ActionClient,
   ActionClientWithSchema,
+  BuiltAction,
+  IdempotencyConfig,
 } from '../../types'
 import { defineAction } from './defineAction'
 
@@ -34,7 +37,7 @@ type ServerErrorHandler = (error: Error) => { code: string, message: string, sta
  *   })
  * ```
  */
-export function createActionClient<TCtx = Record<string, never>>(
+export function createActionClient<TCtx = Record<string, unknown>>(
   opts?: {
     middleware?: ActionMiddleware[]
     handleServerError?: ServerErrorHandler
@@ -54,6 +57,7 @@ interface BuilderConfig {
   metadata: ActionMetadata
   inputSchema?: StandardSchemaV1
   outputSchema?: StandardSchemaV1
+  idempotency?: IdempotencyConfig
   handleServerError?: ServerErrorHandler
 }
 
@@ -85,12 +89,20 @@ function buildClient<TCtx>(config: BuilderConfig): ActionClient<TCtx> {
       })
     },
 
+    idempotency(idempotencyConfig: IdempotencyConfig = {}): ActionClient<TCtx> {
+      return buildClient<TCtx>({
+        ...config,
+        idempotency: idempotencyConfig,
+      })
+    },
+
     action<TOutput>(
       handler: ActionHandler<unknown, TOutput, TCtx>,
     ) {
       return defineAction({
         middleware: config.middleware,
         metadata: config.metadata,
+        idempotency: config.idempotency,
         handleServerError: config.handleServerError,
         handler: handler as ActionHandler<unknown, TOutput, Record<string, unknown>>,
       })
@@ -118,17 +130,29 @@ function buildClientWithSchema<TCtx, TInputSchema extends StandardSchemaV1>(
       })
     },
 
+    idempotency(idempotencyConfig: IdempotencyConfig = {}): ActionClientWithSchema<TCtx, TInputSchema> {
+      return buildClientWithSchema<TCtx, TInputSchema>({
+        ...config,
+        idempotency: idempotencyConfig,
+      })
+    },
+
     action<TOutput>(
       handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>,
     ) {
+      /*
+       * defineAction's phantom input type and InferInput are equivalent but
+       * expressed as distinct deferred conditionals TS cannot unify.
+       */
       return defineAction<TInputSchema, TOutput, Record<string, unknown>, StandardSchemaV1 | undefined>({
         input: config.inputSchema as TInputSchema,
         outputSchema: config.outputSchema as StandardSchemaV1 | undefined,
         middleware: config.middleware,
         metadata: config.metadata,
+        idempotency: config.idempotency,
         handleServerError: config.handleServerError,
         handler: handler as ActionHandler<InferOutput<TInputSchema>, TOutput, Record<string, unknown>>,
-      })
+      }) as unknown as BuiltAction<InferInput<TInputSchema>, TOutput>
     },
   }
 }

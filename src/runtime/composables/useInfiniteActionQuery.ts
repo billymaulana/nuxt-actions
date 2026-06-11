@@ -88,10 +88,12 @@ export function useInfiniteActionQuery(
   const isBodyMethod = method === 'POST' || method === 'PUT' || method === 'PATCH'
 
   // ── State ────────────────────────────────────────────────────────
-  const pages = ref<unknown[]>([])
-  const error = ref<ActionError | null>(null)
+  /* Pages 2+ fetched on the client; page 1 is derived from useAsyncData. */
+  const extraPages = ref<unknown[]>([])
+  const fetchNextError = ref<ActionError | null>(null)
   const isFetchingNextPage = ref(false)
-  let nextPageParam: unknown = options.initialPageParam
+  /* Bumped by refresh()/clear()/dispose so an in-flight fetchNextPage can detect it raced a reset. */
+  let generation = 0
 
   // ── Enabled flag ─────────────────────────────────────────────────
   const isEnabled = computed(() => {
@@ -130,17 +132,31 @@ export function useInfiniteActionQuery(
     },
   )
 
-  // Sync the first page from useAsyncData into our pages array
-  watch(
-    () => asyncData.data.value,
-    (raw) => {
-      if (!raw?.success) return
-      const pageData = options.transform ? options.transform(raw.data as never) : raw.data
-      pages.value = [pageData]
-      nextPageParam = options.getNextPageParam(pageData, [pageData])
-    },
-    { immediate: true },
-  )
+  /*
+   * Page 1 is derived from useAsyncData at render time (a computed), NOT synced
+   * via an immediate watch. Vue stops an immediate watcher during SSR before
+   * onServerPrefetch resolves the data, which left `pages` empty in the server
+   * HTML and caused a hydration mismatch. A computed reads the resolved value
+   * whenever the template renders it.
+   */
+  // ── pages: first page + client-fetched extras ────────────────────
+  /* A user transform that throws must degrade gracefully, not crash render. */
+  function applyTransform(value: unknown): unknown {
+    if (!options.transform) return value
+    try {
+      return options.transform(value as never)
+    }
+    catch {
+      return value
+    }
+  }
+
+  const pages = computed<unknown[]>(() => {
+    const raw = asyncData.data.value
+    /* Gate on the success flag, not the data value — a successful page whose data is undefined still counts. */
+    if (raw?.success !== true) return []
+    return [applyTransform(raw.data), ...extraPages.value]
+  })
 
   // Watch enabled — trigger fetch when reactive ref becomes true
   if (options.enabled !== undefined && typeof options.enabled !== 'boolean') {
@@ -151,66 +167,95 @@ export function useInfiniteActionQuery(
 
   // ── data: last page ──────────────────────────────────────────────
   const data = computed(() => {
-    if (pages.value.length === 0) return null
-    return pages.value[pages.value.length - 1]
+    const all = pages.value
+    return all.length === 0 ? null : all[all.length - 1]
   })
 
-  // ── hasNextPage ──────────────────────────────────────────────────
-  const hasNextPage = computed(() => nextPageParam !== undefined)
+  /*
+   * Surface the first-page envelope error too: a {success:false} action resolves
+   * HTTP 200, so useAsyncData stays "success" — without this the failure would be
+   * silently swallowed. A fetchNextPage error takes precedence (it is newer).
+   */
+  const error = computed<ActionError | null>(() => {
+    if (fetchNextError.value) return fetchNextError.value
+    const raw = asyncData.data.value
+    return raw && raw.success === false ? raw.error : null
+  })
+
+  // ── nextPageParam / hasNextPage (reactively derived) ─────────────
+  const nextPageParam = computed<unknown>(() => {
+    const all = pages.value
+    if (all.length === 0) return options.initialPageParam
+    try {
+      return options.getNextPageParam(all[all.length - 1], all)
+    }
+    catch {
+      /* A throwing extractor must degrade to "no next page", not crash render. */
+      return undefined
+    }
+  })
+  const hasNextPage = computed(() => nextPageParam.value !== undefined)
 
   // ── fetchNextPage ────────────────────────────────────────────────
   async function fetchNextPage(): Promise<void> {
     if (!hasNextPage.value || isFetchingNextPage.value) return
 
+    const startGeneration = generation
     isFetchingNextPage.value = true
-    error.value = null
+    fetchNextError.value = null
 
     try {
       const result = await appFetch<ActionResult<unknown>>(
         path,
-        buildFetchOpts(nextPageParam),
+        buildFetchOpts(nextPageParam.value),
       )
+
+      /* A refresh()/clear() that landed mid-flight must not be clobbered by this stale page. */
+      if (generation !== startGeneration) return
 
       if (result.success) {
         const pageData = options.transform ? options.transform(result.data as never) : result.data
-        pages.value = [...pages.value, pageData]
-        nextPageParam = options.getNextPageParam(pageData, pages.value)
+        extraPages.value = [...extraPages.value, pageData]
       }
       else {
-        error.value = result.error
+        fetchNextError.value = result.error
       }
     }
     catch (err: unknown) {
-      error.value = {
+      if (generation !== startGeneration) return
+      fetchNextError.value = {
         code: 'FETCH_ERROR',
         message: err instanceof Error ? err.message : 'Failed to fetch next page',
         statusCode: 0,
       }
     }
     finally {
-      isFetchingNextPage.value = false
+      if (generation === startGeneration) isFetchingNextPage.value = false
     }
   }
 
   // ── refresh: re-fetch from scratch ───────────────────────────────
   async function refresh(): Promise<void> {
-    pages.value = []
-    nextPageParam = options.initialPageParam
-    error.value = null
+    generation++
+    extraPages.value = []
+    fetchNextError.value = null
+    isFetchingNextPage.value = false
     await asyncData.refresh()
   }
 
   // ── clear ────────────────────────────────────────────────────────
   function clear(): void {
-    pages.value = []
-    nextPageParam = options.initialPageParam
-    error.value = null
+    generation++
+    extraPages.value = []
+    fetchNextError.value = null
+    isFetchingNextPage.value = false
     asyncData.clear()
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────
   onScopeDispose(() => {
-    pages.value = []
+    generation++
+    extraPages.value = []
   })
 
   return {

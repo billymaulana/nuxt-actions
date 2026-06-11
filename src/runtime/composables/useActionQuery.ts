@@ -143,12 +143,18 @@ export function useActionQuery(
   })
 
   // ── Polling ───────────────────────────────────────────────────
-  if (options.refetchInterval && options.refetchInterval > 0) {
+  /*
+   * Client-only: SSR effect scopes are never disposed, so a server-side
+   * interval would leak per request and re-invoke the action forever.
+   */
+  /* v8 ignore start -- client-only branch */
+  if (options.refetchInterval && options.refetchInterval > 0 && import.meta.client) {
     const intervalId = setInterval(() => {
       if (isEnabled.value) asyncData.refresh()
     }, options.refetchInterval)
     onScopeDispose(() => clearInterval(intervalId))
   }
+  /* v8 ignore stop */
 
   // ── Refetch on focus ──────────────────────────────────────────
   /* v8 ignore start -- client-only branch */

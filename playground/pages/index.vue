@@ -73,5 +73,20 @@ const pages = [
     title: 'Advanced Features',
     description: 'Retry, timeout, custom headers, dedupe, throttle, output validation, and executeAsync.',
   },
+  {
+    path: '/idempotency',
+    title: 'Idempotency',
+    description: 'Duplicate payments replay the stored result via the Idempotency-Key header.',
+  },
+  {
+    path: '/observability',
+    title: 'Observability',
+    description: 'Global action:start/success/error/settled hooks plus grouped actions.admin.stats access.',
+  },
+  {
+    path: '/resilience',
+    title: 'Resilience',
+    description: 'Exponential retry backoff with jitter, cancelPrevious search, and manual cancel().',
+  },
 ]
 </script>

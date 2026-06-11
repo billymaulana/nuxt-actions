@@ -8,10 +8,10 @@ const authed = useAction(whoami, { headers: { 'x-user-id': 'u_42' } })
 <template>
   <div>
     <h2>Auth Preset (defineAuthMiddleware)</h2>
-    <button @click="anon.execute()">
+    <button @click="anon.execute({})">
       Call without header (expect 401)
     </button>
-    <button @click="authed.execute()">
+    <button @click="authed.execute({})">
       Call with x-user-id header
     </button>
     <pre v-if="anon.error.value">anon error: {{ anon.error.value }}</pre>

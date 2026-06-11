@@ -3,7 +3,17 @@ import { defineEventHandler } from 'h3'
 import { actions, info } from '#actions-openapi-registry'
 import { collectSchemas, buildOpenApiDocument } from './utils/openapi'
 
-export default defineEventHandler(async () => {
-  const schemas = await collectSchemas(actions)
-  return buildOpenApiDocument({ actions, schemas, info })
+/*
+ * The action registry is fixed at build time, so the document is invariant —
+ * build it once and reuse it instead of re-running schema conversion on every
+ * request.
+ */
+let cachedDocument: Promise<unknown> | undefined
+
+export default defineEventHandler(() => {
+  cachedDocument ??= (async () => {
+    const schemas = await collectSchemas(actions)
+    return buildOpenApiDocument({ actions, schemas, info })
+  })()
+  return cachedDocument
 })

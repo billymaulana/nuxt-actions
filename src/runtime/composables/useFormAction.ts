@@ -34,7 +34,7 @@ export function useFormAction(
   const fields = reactive(JSON.parse(JSON.stringify(initialSnapshot)))
 
   // Wrap the underlying useAction
-  const { execute, data, error, status, reset: resetAction, isExecuting } = useAction(
+  const { execute, data, error, status, reset: resetAction, isExecuting, cancel } = useAction(
     pathOrAction as string,
     {
       method: options.method,
@@ -42,8 +42,10 @@ export function useFormAction(
       retry: options.retry,
       timeout: options.timeout,
       dedupe: options.dedupe,
+      cancelPrevious: options.cancelPrevious,
       debounce: options.debounce,
       throttle: options.throttle,
+      transform: options.transform,
       onSuccess: options.onSuccess as (data: unknown) => void,
       onError: options.onError,
       onSettled: options.onSettled as (result: ActionResult<unknown>) => void,
@@ -92,6 +94,7 @@ export function useFormAction(
     submit,
     fieldErrors,
     isDirty,
+    cancel,
     reset,
     status,
     error,

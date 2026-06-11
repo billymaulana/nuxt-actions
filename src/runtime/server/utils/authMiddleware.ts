@@ -16,7 +16,7 @@ import { createActionError } from './defineAction'
 export function defineAuthMiddleware<TUser>(
   resolve: (event: H3Event) => TUser | null | undefined | Promise<TUser | null | undefined>,
   opts: AuthMiddlewareOptions = {},
-): ActionMiddleware {
+): ActionMiddleware<Record<string, unknown>, { user: TUser | null }> {
   return async ({ event, next }) => {
     const user = await resolve(event)
     if (!user && !opts.optional) {

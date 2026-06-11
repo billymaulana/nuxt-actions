@@ -124,6 +124,10 @@ updateFn: (input, current) =>
 
 ---
 
+## Concurrency
+
+Unlike [`useAction`](/api/use-action) (which runs calls concurrently by default), `useOptimisticAction` **always cancels the previous in-flight request** when `execute()` is called again — there is no `dedupe`/`cancelPrevious` option because chained optimistic updates require it. A superseded call resolves with an `ABORT_ERROR` result and its `onSuccess` does not run, even though the server may already have committed it. The latest call's `optimisticData` always wins; rapid successive calls chain correctly.
+
 ## Return Value
 
 ```ts

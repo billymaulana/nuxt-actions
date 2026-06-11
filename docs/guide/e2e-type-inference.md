@@ -106,6 +106,29 @@ The `#actions` virtual module exports a **camelCase** reference for each action 
 | `list-todos.get.ts` | `listTodos` |
 | `update-user.put.ts` | `updateUser` |
 
+Files in subdirectories get a prefixed flat name: `auth/login.post.ts` exports `authLogin` and is served at `/api/_actions/auth/login`.
+
+### Grouped `actions` Namespace
+
+Alongside the flat exports, `#actions` also exports one grouped `actions` object that mirrors your directory structure -- handy for discoverability and autocomplete in larger apps:
+
+```text
+server/actions/
+  create-todo.ts
+  auth/
+    login.post.ts
+    register.post.ts
+```
+
+```ts
+import { actions } from '#actions'
+
+useAction(actions.createTodo)   // root files sit at the top level
+useAction(actions.auth.login)   // identical reference to the flat authLogin
+```
+
+Both forms are the same frozen typed reference -- pick whichever reads better. Name collisions between a directory and an action file are reported as a build warning, and the conflicting entry is skipped in the grouped object (the flat export always works). One special case: an action file named `actions.ts` would shadow the grouped export itself, so the grouped object is omitted entirely (with a build warning) until the file is renamed.
+
 ## Configuration
 
 You can customize the actions directory in your `nuxt.config.ts`:

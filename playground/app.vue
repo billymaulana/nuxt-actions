@@ -19,6 +19,27 @@
       <NuxtLink to="/middleware">
         Middleware
       </NuxtLink>
+      <NuxtLink to="/forms">
+        Forms
+      </NuxtLink>
+      <NuxtLink to="/cache">
+        Cache
+      </NuxtLink>
+      <NuxtLink to="/upload">
+        Upload
+      </NuxtLink>
+      <NuxtLink to="/auth">
+        Auth
+      </NuxtLink>
+      <NuxtLink to="/idempotency">
+        Idempotency
+      </NuxtLink>
+      <NuxtLink to="/observability">
+        Observability
+      </NuxtLink>
+      <NuxtLink to="/resilience">
+        Resilience
+      </NuxtLink>
       <NuxtLink to="/advanced">
         Advanced
       </NuxtLink>

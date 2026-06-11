@@ -11,7 +11,7 @@ import type {
   InferActionInput,
   InferActionOutput,
 } from '../types'
-import { buildFetchOptions, createDebouncedFn, createThrottledFn } from './_utils'
+import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, abortResult, raceAbort } from './_utils'
 
 /**
  * Composable for optimistic updates with automatic rollback on error.
@@ -77,14 +77,18 @@ export function useOptimisticAction(
   // Track concurrent calls to prevent stale rollbacks
   let callCounter = 0
   let currentController: AbortController | null = null
+  /* All in-flight controllers, so cancel()/reset() abort stragglers too. */
+  const live = new Set<AbortController>()
 
   async function execute(input: unknown): Promise<ActionResult<unknown>> {
     // Abort previous in-flight request
     currentController?.abort()
     const controller = new AbortController()
     currentController = controller
+    live.add(controller)
 
     const thisCallId = ++callCounter
+    const isLatest = () => callCounter === thisCallId
 
     // Save snapshot for rollback — deep clone to prevent nested mutation from corrupting the snapshot.
     // Uses JSON round-trip instead of structuredClone because Vue reactive proxies are not cloneable,
@@ -96,87 +100,157 @@ export function useOptimisticAction(
     optimisticData.value = options.updateFn(input, optimisticData.value)
 
     options.onExecute?.(input)
+    const startedAt = Date.now()
+    emitActionHook(nuxtApp, 'action:start', { path, method, input })
 
     status.value = 'executing'
     error.value = null
 
+    /*
+     * ofetch ignores its timeout option when an external signal is provided,
+     * so the deadline is enforced here. Aborting with no reason yields a real
+     * AbortError that stops ofetch's retry loop. `timedOut` distinguishes a
+     * timeout from a manual cancel.
+     */
+    let timedOut = false
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined
+    if (options.timeout && options.timeout > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, options.timeout)
+    }
+
+    const fetchOptions = buildFetchOptions({
+      method,
+      input,
+      headers: options.headers,
+      retry: options.retry,
+      signal: controller.signal,
+    })
+    const fetchPromise = appFetch<ActionResult<unknown>>(path, fetchOptions)
+
     try {
-      const fetchOptions = buildFetchOptions({
-        method,
-        input,
-        headers: options.headers,
-        retry: options.retry,
-        timeout: options.timeout,
-        signal: controller.signal,
-      })
+      const result = await raceAbort(fetchPromise, controller.signal)
 
-      const result = await appFetch<ActionResult<unknown>>(
-        path,
-        fetchOptions,
-      )
-
+      const durationMs = Date.now() - startedAt
+      /*
+       * Only the latest call writes shared state. A superseded call is usually
+       * aborted first, but if its fetch had already settled when the newer call
+       * fired, raceAbort resolves with the stale result (the resolve microtask
+       * was queued before the abort) — so it can still reach these branches.
+       */
       if (result.success) {
         const transformed = options.transform ? options.transform(result.data as never) : result.data
-        data.value = transformed
-        // Update optimisticData with server truth
-        optimisticData.value = transformed
-        status.value = 'success'
+        if (isLatest()) {
+          data.value = transformed
+          optimisticData.value = transformed
+          status.value = 'success'
+        }
         options.onSuccess?.(result.data)
         options.onSettled?.(result)
+        emitActionHook(nuxtApp, 'action:success', { path, method, input, data: result.data, durationMs })
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
         return result
       }
       else {
-        // Only rollback if no newer call has superseded this one
-        if (callCounter === thisCallId) {
+        if (isLatest()) {
           optimisticData.value = snapshot
+          error.value = result.error
+          status.value = 'error'
         }
-        error.value = result.error
-        status.value = 'error'
         options.onError?.(result.error)
         options.onSettled?.(result)
+        emitActionHook(nuxtApp, 'action:error', { path, method, input, error: result.error, durationMs })
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
         return result
       }
     }
     catch (err: unknown) {
-      // Handle aborted requests — do NOT rollback optimistic data on intentional cancellation
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        status.value = 'idle'
-        const abortResult: ActionResult<unknown> = {
-          success: false,
-          error: { code: 'ABORT_ERROR', message: 'Request was aborted', statusCode: 0 },
-        }
-        options.onSettled?.(abortResult)
-        return abortResult
-      }
+      const durationMs = Date.now() - startedAt
 
-      // Only rollback if no newer call has superseded this one
-      if (callCounter === thisCallId) {
-        optimisticData.value = snapshot
+      /*
+       * Abort detection keys off the owned signal — ofetch wraps the native
+       * AbortError in a FetchError. A timeout rolls back; an intentional
+       * cancel does NOT roll back the optimistic data.
+       */
+      if (timedOut || isAbortRejection(err, controller.signal)) {
+        if (timedOut) {
+          /*
+           * The timer fires asynchronously, so a newer call can supersede this
+           * one between the timer firing and this catch running — guard the
+           * shared writes so a stale timeout can't clobber the latest call.
+           */
+          const timeoutError: ActionError = {
+            code: 'TIMEOUT_ERROR',
+            message: `Request timed out after ${options.timeout}ms`,
+            statusCode: 408,
+          }
+          if (isLatest()) {
+            optimisticData.value = snapshot
+            error.value = timeoutError
+            status.value = 'error'
+          }
+          const result: ActionResult<unknown> = { success: false, error: timeoutError }
+          options.onError?.(timeoutError)
+          options.onSettled?.(result)
+          emitActionHook(nuxtApp, 'action:error', { path, method, input, error: timeoutError, durationMs })
+          emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
+          return result
+        }
+
+        // A superseded (aborted) call must not reset the newer call's state.
+        if (isLatest()) {
+          status.value = 'idle'
+        }
+        const aborted = abortResult()
+        options.onSettled?.(aborted)
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result: aborted, durationMs })
+        return aborted
       }
 
       const actionError: ActionError = {
         code: 'FETCH_ERROR',
         message: err instanceof Error ? err.message : 'Failed to execute action',
-        statusCode: 500,
+        statusCode: 0,
       }
 
-      error.value = actionError
-      status.value = 'error'
+      if (isLatest()) {
+        optimisticData.value = snapshot
+        error.value = actionError
+        status.value = 'error'
+      }
 
       const result: ActionResult<unknown> = { success: false, error: actionError }
       options.onError?.(actionError)
       options.onSettled?.(result)
+      emitActionHook(nuxtApp, 'action:error', { path, method, input, error: actionError, durationMs })
+      emitActionHook(nuxtApp, 'action:settled', { path, method, input, result, durationMs })
 
       return result
     }
+    finally {
+      if (timeoutTimer) clearTimeout(timeoutTimer)
+      live.delete(controller)
+      // Swallow the loser of the race (ofetch may reject later after retries)
+      fetchPromise.catch(() => {})
+    }
+  }
+
+  function abortAll() {
+    for (const controller of live) controller.abort()
+    live.clear()
+    currentController = null
+    /*
+     * Advance the latest-call barrier so a straggler whose raceAbort already
+     * resolved (abort lost the microtask race) can't write back over a reset()/
+     * cancel(). A fresh execute() bumps callCounter again and re-becomes latest.
+     */
+    callCounter++
   }
 
   function reset() {
-    // Abort any in-flight request
-    if (currentController) {
-      currentController.abort()
-      currentController = null
-    }
+    abortAll()
     optimisticData.value = toValue(options.currentData)
     data.value = null
     error.value = null
@@ -186,22 +260,26 @@ export function useOptimisticAction(
   // Wrap execute with debounce or throttle if configured (debounce takes priority)
   let wrappedExecute = execute
   if (options.debounce && options.debounce > 0) {
-    wrappedExecute = createDebouncedFn(execute, options.debounce) as unknown as typeof execute
+    wrappedExecute = createDebouncedFn(execute, options.debounce, abortResult) as unknown as typeof execute
   }
   else if (options.throttle && options.throttle > 0) {
-    wrappedExecute = createThrottledFn(execute, options.throttle) as unknown as typeof execute
+    wrappedExecute = createThrottledFn(execute, options.throttle, abortResult) as unknown as typeof execute
+  }
+
+  function cancel() {
+    if (wrappedExecute !== execute && 'cancel' in wrappedExecute) {
+      (wrappedExecute as { cancel: () => void }).cancel()
+    }
+    abortAll()
+    // Explicit cancel returns to idle without rolling back optimistic data.
+    if (status.value === 'executing') status.value = 'idle'
   }
 
   // Clean up timers and in-flight requests on scope dispose
   if (wrappedExecute !== execute && 'cancel' in wrappedExecute) {
     onScopeDispose(() => (wrappedExecute as { cancel: () => void }).cancel())
   }
-  onScopeDispose(() => {
-    if (currentController) {
-      currentController.abort()
-      currentController = null
-    }
-  })
+  onScopeDispose(abortAll)
 
   return {
     execute: wrappedExecute,
@@ -213,6 +291,7 @@ export function useOptimisticAction(
     isExecuting,
     hasSucceeded,
     hasErrored,
+    cancel,
     reset,
   }
 }

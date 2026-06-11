@@ -8,6 +8,7 @@ const mockEventStream = {
   push: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
   send: vi.fn().mockResolvedValue(undefined),
+  onClosed: vi.fn(),
 }
 
 vi.mock('h3', () => ({
@@ -18,6 +19,7 @@ vi.mock('h3', () => ({
     push: mockEventStream.push,
     close: mockEventStream.close,
     send: mockEventStream.send,
+    onClosed: mockEventStream.onClosed,
   })),
 }))
 
@@ -36,6 +38,69 @@ describe('defineStreamAction', () => {
     mockEventStream.push.mockResolvedValue(undefined)
     mockEventStream.close.mockResolvedValue(undefined)
     mockEventStream.send.mockResolvedValue(undefined)
+  })
+
+  describe('client disconnect (A6)', () => {
+    it('exposes an abort signal that fires when the stream closes', async () => {
+      let closedCb: (() => void) | undefined
+      mockEventStream.onClosed.mockImplementation((cb: () => void) => {
+        closedCb = cb
+      })
+
+      let capturedSignal: AbortSignal | undefined
+      const action = defineStreamAction({
+        handler: async ({ stream }) => {
+          capturedSignal = stream.signal
+          await stream.send({ text: 'hi' })
+        },
+      })
+      await action(createMockEvent('POST'))
+      await Promise.resolve()
+
+      expect(capturedSignal).toBeInstanceOf(AbortSignal)
+      expect(capturedSignal!.aborted).toBe(false)
+
+      // Simulate the client disconnecting
+      closedCb?.()
+      expect(capturedSignal!.aborted).toBe(true)
+    })
+
+    it('send() becomes a no-op after the client disconnects', async () => {
+      let closedCb: (() => void) | undefined
+      mockEventStream.onClosed.mockImplementation((cb: () => void) => {
+        closedCb = cb
+      })
+
+      const action = defineStreamAction({
+        handler: async ({ stream }) => {
+          closedCb?.() // client gone before we push
+          await stream.send({ text: 'should-not-be-pushed' })
+        },
+      })
+      await action(createMockEvent('POST'))
+      await Promise.resolve()
+
+      expect(mockEventStream.push).not.toHaveBeenCalled()
+    })
+
+    it('close() is a no-op after the client already disconnected', async () => {
+      let closedCb: (() => void) | undefined
+      mockEventStream.onClosed.mockImplementation((cb: () => void) => {
+        closedCb = cb
+      })
+
+      const action = defineStreamAction({
+        handler: async ({ stream }) => {
+          closedCb?.() // disconnect first
+          await stream.close() // must not push the done event or re-close
+        },
+      })
+      await action(createMockEvent('POST'))
+      await Promise.resolve()
+
+      expect(mockEventStream.push).not.toHaveBeenCalled()
+      expect(mockEventStream.close).not.toHaveBeenCalled()
+    })
   })
 
   describe('basic streaming', () => {
