@@ -299,31 +299,40 @@ export default defineNuxtModule<ModuleOptions>({
     const serverDir = nuxt.options.serverDir || join(nuxt.options.srcDir, 'server')
     const actionsDirPath = join(serverDir, actionsDir)
 
-    // Scan for action files — reuse buildScannedActions to avoid duplication
-    const actionFiles = scanActionFiles(actionsDirPath)
-
-    // ── Colocated actions: scan pages/**/actions/ ─────────────────
-    if (options.colocate) {
-      const pagesDir = join(nuxt.options.srcDir, 'pages')
-      if (existsSync(pagesDir)) {
-        const scanPagesForActions = (dir: string, prefix = ''): void => {
-          if (!existsSync(dir)) return
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('_')) continue
-            const fullPath = join(dir, entry.name)
-            const newPrefix = prefix ? `${prefix}/${entry.name}` : entry.name
-            if (entry.name === 'actions') {
-              // Found an actions/ directory — scan it
-              actionFiles.push(...scanActionFiles(fullPath, newPrefix))
-            }
-            else {
-              scanPagesForActions(fullPath, newPrefix)
+    /*
+     * Scan server/actions plus, when colocate is on, every pages/ ** /actions/
+     * directory. Used for the initial scan, template regeneration, and HMR
+     * structural-change detection so all three see the same file set (otherwise
+     * colocated files look "removed" on every watch tick and force a restart).
+     */
+    function scanAllActionFiles(): ReturnType<typeof scanActionFiles> {
+      const files = scanActionFiles(actionsDirPath)
+      if (options.colocate) {
+        const pagesDir = join(nuxt.options.srcDir, 'pages')
+        if (existsSync(pagesDir)) {
+          const scanPagesForActions = (dir: string, prefix = ''): void => {
+            if (!existsSync(dir)) return
+            for (const entry of readdirSync(dir, { withFileTypes: true })) {
+              if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('_')) continue
+              const fullPath = join(dir, entry.name)
+              const newPrefix = prefix ? `${prefix}/${entry.name}` : entry.name
+              if (entry.name === 'actions') {
+                files.push(...scanActionFiles(fullPath, newPrefix))
+              }
+              else {
+                scanPagesForActions(fullPath, newPrefix)
+              }
             }
           }
+          scanPagesForActions(pagesDir)
         }
-        scanPagesForActions(pagesDir)
-        logger.info(`Colocated action scanning enabled — found ${actionFiles.length} total action files`)
       }
+      return files
+    }
+
+    const actionFiles = scanAllActionFiles()
+    if (options.colocate) {
+      logger.info(`Colocated action scanning enabled — found ${actionFiles.length} total action files`)
     }
 
     const scannedActions = buildScannedActions(actionFiles, nuxt, actionsDir, msg => logger.warn(msg))
@@ -378,7 +387,7 @@ export default defineNuxtModule<ModuleOptions>({
       write: true,
       getContents: () => {
         // Re-scan on each call to support HMR
-        const freshFiles = scanActionFiles(actionsDirPath)
+        const freshFiles = scanAllActionFiles()
         const freshActions = buildScannedActions(freshFiles, nuxt, actionsDir)
         return generateActionsTemplate(freshActions, nuxt.options.buildDir, msg => logger.warn(msg))
       },
@@ -403,14 +412,16 @@ export default defineNuxtModule<ModuleOptions>({
 
     nuxt.hook('builder:watch', async (event, relativePath) => {
       const normalized = relativePath.replace(/\\/g, '/')
-      if (!normalized.includes(`server/${actionsDir}/`)) return
+      const isServerAction = normalized.includes(`server/${actionsDir}/`)
+      const isColocatedAction = options.colocate && /\/actions\/.*\.ts$/.test(`/${normalized}`) && normalized.startsWith('pages/')
+      if (!isServerAction && !isColocatedAction) return
       if (!normalized.endsWith('.ts')) return
 
       // Always regenerate type templates for content changes
       await updateTemplates({ filter: t => t.filename === 'actions.ts' })
 
       // Detect structural changes (new or deleted action files)
-      const freshFiles = scanActionFiles(actionsDirPath)
+      const freshFiles = scanAllActionFiles()
       const freshPaths = new Set(freshFiles.map(f => f.filePath.replace(/\\/g, '/')))
 
       const hasStructuralChange

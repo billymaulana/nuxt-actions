@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getHeader, setHeader } from 'h3'
 import type { H3Event } from 'h3'
 import type {
@@ -11,6 +12,21 @@ import { stableStringify } from '../../composables/_utils'
 const DEFAULT_TTL = 86_400_000
 const DEFAULT_HEADER = 'Idempotency-Key'
 const DEFAULT_MAX_ENTRIES = 10_000
+
+/**
+ * Compose an injective store key from independently-encoded segments so a
+ * client-controlled key can never collide across scopes via the ':' delimiter
+ * (e.g. scope "acme" + key "42:x" must not equal scope "acme:42" + key "x").
+ * The query string is dropped so the same logical action maps to one key.
+ */
+function composeStoreKey(path: string, scope: string, rawKey: string): string {
+  return JSON.stringify([path.split('?')[0], scope, rawKey])
+}
+
+/** Constant-size, collision-free fingerprint of the request input. */
+function fingerprintOf(rawInput: unknown): string {
+  return createHash('sha256').update(stableStringify(rawInput)).digest('hex')
+}
 
 /**
  * In-memory IdempotencyStore with TTL expiry and a hard size cap.
@@ -80,7 +96,22 @@ export async function executeWithIdempotency(
   run: () => Promise<ActionResult<unknown>>,
 ): Promise<ActionResult<unknown>> {
   const header = config.header ?? DEFAULT_HEADER
-  const rawKey = config.key ? await config.key(event) : getHeader(event, header)
+
+  let rawKey: string | null | undefined
+  let scope: string
+  try {
+    rawKey = config.key ? await config.key(event) : getHeader(event, header)
+    if (rawKey) {
+      scope = config.scope ? await config.scope(event) : ''
+    }
+    else {
+      scope = ''
+    }
+  }
+  catch {
+    /* A throwing key/scope resolver must fail closed as a typed result, never a raw 500. */
+    return storeUnavailableError()
+  }
 
   if (!rawKey) {
     if (config.required) {
@@ -96,25 +127,18 @@ export async function executeWithIdempotency(
     return run()
   }
 
-  const scope = config.scope ? await config.scope(event) : ''
-  const storeKey = `${event.path}:${scope}:${rawKey}`
-  const fingerprint = stableStringify(rawInput)
+  const storeKey = composeStoreKey(event.path, scope, rawKey)
+  const fingerprint = fingerprintOf(rawInput)
   const store = config.store ?? defaultStore
+  const ttl = config.ttl ?? DEFAULT_TTL
 
-  const existing = await store.get(storeKey)
-  if (existing) {
-    if (existing.fingerprint !== fingerprint) {
-      return keyReuseError()
-    }
-    try {
-      setHeader(event, 'idempotency-replayed', 'true')
-    }
-    catch {
-      /* replay must succeed even when the response is no longer writable */
-    }
-    return existing.result
-  }
-
+  /*
+   * Claim the in-flight slot SYNCHRONOUSLY (no await before inflight.set), so
+   * two concurrent duplicates cannot both pass an async store.get and run the
+   * handler twice. The async store lookup happens inside the claimed promise.
+   * Cross-instance dedupe (shared store) still needs an atomic claim in the
+   * store implementation; this closes the in-process window.
+   */
   const pending = inflight.get(storeKey)
   if (pending) {
     if (pending.fingerprint !== fingerprint) {
@@ -123,13 +147,35 @@ export async function executeWithIdempotency(
     return pending.promise
   }
 
-  const promise = run()
-  inflight.set(storeKey, { fingerprint, promise })
-  try {
-    const result = await promise
+  const promise = (async (): Promise<ActionResult<unknown>> => {
+    let existing: IdempotencyRecord | null | undefined
+    try {
+      existing = await store.get(storeKey)
+    }
+    catch {
+      /*
+       * A read outage (e.g. Redis down) fails closed: never run the handler
+       * blindly (risking a double-execution), and never leak a raw 500.
+       */
+      return storeUnavailableError()
+    }
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) {
+        return keyReuseError()
+      }
+      try {
+        setHeader(event, 'idempotency-replayed', 'true')
+      }
+      catch {
+        /* replay must succeed even when the response is no longer writable */
+      }
+      return existing.result
+    }
+
+    const result = await run()
     if (result.success) {
       try {
-        await store.set(storeKey, { fingerprint, result }, config.ttl ?? DEFAULT_TTL)
+        await store.set(storeKey, { fingerprint, result }, ttl)
       }
       catch {
         /*
@@ -140,6 +186,11 @@ export async function executeWithIdempotency(
       }
     }
     return result
+  })()
+
+  inflight.set(storeKey, { fingerprint, promise })
+  try {
+    return await promise
   }
   finally {
     inflight.delete(storeKey)
@@ -153,6 +204,17 @@ function keyReuseError(): ActionResult<never> {
       code: 'IDEMPOTENCY_KEY_REUSE',
       message: 'Idempotency key was already used with a different request payload',
       statusCode: 422,
+    },
+  }
+}
+
+function storeUnavailableError(): ActionResult<never> {
+  return {
+    success: false,
+    error: {
+      code: 'IDEMPOTENCY_STORE_ERROR',
+      message: 'Idempotency store unavailable',
+      statusCode: 503,
     },
   }
 }

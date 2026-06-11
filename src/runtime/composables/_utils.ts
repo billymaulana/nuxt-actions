@@ -27,7 +27,7 @@ export function stableStringify(value: unknown): string {
       const bytes = ArrayBuffer.isView(val)
         ? new Uint8Array(val.buffer, val.byteOffset, val.byteLength)
         : new Uint8Array(val)
-      return `["__binary__",${bytes.byteLength},"${fnv1a(bytes)}"]`
+      return `["__binary__",${bytes.byteLength},"${binaryDigest(bytes)}"]`
     }
     if (val instanceof Map) return serialize(Object.fromEntries(val))
     if (val instanceof Set) return serialize([...val])
@@ -54,15 +54,20 @@ export function stableStringify(value: unknown): string {
 }
 
 /**
- * FNV-1a 32-bit hash — fast, dependency-free digest for binary fingerprints.
+ * Two independent FNV-1a passes (different offset basis) combined into a 64-bit
+ * digest — dependency-free and isomorphic (no node:crypto), with a birthday
+ * bound around 2^32 so distinct binary bodies of equal length don't collide in
+ * practice. Used to fingerprint binary payloads for idempotency.
  */
-function fnv1a(bytes: Uint8Array): string {
-  let hash = 0x811C9DC5
+function binaryDigest(bytes: Uint8Array): string {
+  let h1 = 0x811C9DC5
+  let h2 = 0xC2B2AE35
   for (let i = 0; i < bytes.length; i++) {
-    hash ^= bytes[i]!
-    hash = Math.imul(hash, 0x01000193)
+    const b = bytes[i]!
+    h1 = Math.imul(h1 ^ b, 0x01000193)
+    h2 = Math.imul(h2 ^ b, 0x01000193)
   }
-  return (hash >>> 0).toString(16)
+  return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0')
 }
 
 // ── Retry helpers ─────────────────────────────────────────────────
@@ -120,7 +125,35 @@ function needsDynamicRetryDelay(config: RetryConfig): boolean {
 
 // ── Abort & timeout helpers ───────────────────────────────────────
 
-export const TIMEOUT_ABORT_REASON = 'nuxt-actions:timeout'
+/** The settled result every aborted execute() resolves with. */
+export function abortResult(): { success: false, error: { code: string, message: string, statusCode: number } } {
+  return { success: false, error: { code: 'ABORT_ERROR', message: 'Request was aborted', statusCode: 0 } }
+}
+
+/**
+ * Resolve with the promise's value, or reject the moment `signal` aborts —
+ * whichever comes first. Lets execute() settle on abort without waiting out
+ * an in-flight ofetch retry-backoff sleep.
+ */
+export function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      },
+      (err) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(err)
+      },
+    )
+  })
+}
 
 /**
  * Detect an aborted request across runtimes. Real ofetch never rethrows the
@@ -131,10 +164,6 @@ export function isAbortRejection(err: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) return true
   const candidate = err as { name?: string, cause?: { name?: string } } | null | undefined
   return candidate?.name === 'AbortError' || candidate?.cause?.name === 'AbortError'
-}
-
-export function isTimeoutAbort(signal: AbortSignal): boolean {
-  return signal.aborted && signal.reason === TIMEOUT_ABORT_REASON
 }
 
 // ── Global hook emitter ───────────────────────────────────────────
@@ -248,35 +277,63 @@ export class CancelledError extends Error {
 export type CancelableFunction<T extends (...args: any[]) => any>
   = ((...args: Parameters<T>) => Promise<ReturnType<T>>) & { cancel: () => void }
 
+interface Resolver<T> {
+  resolve: (value: T) => void
+  reject: (reason: unknown) => void
+}
+
+/*
+ * Settle a snapshotted batch of resolvers with the result of a (possibly
+ * sync-throwing) call. The batch is captured at fire time so callers that
+ * arrive while `fn` is in flight start a fresh window instead of receiving
+ * this window's result.
+ */
+function settleBatch<T>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fn: () => any,
+  batch: Array<Resolver<T>>,
+): void {
+  Promise.resolve()
+    .then(fn)
+    .then(
+      (result: T) => {
+        for (const r of batch) r.resolve(result)
+      },
+      (err: unknown) => {
+        for (const r of batch) r.reject(err)
+      },
+    )
+}
+
 /**
  * Create a debounced function that delays invoking `fn` until after
  * `ms` milliseconds have elapsed since the last call. Last-call-wins.
  * All callers' promises resolve with the eventual result.
+ *
+ * `onCancel`, when provided, settles pending callers with its value instead
+ * of rejecting — used by the action composables so cancel()/unmount keep the
+ * documented "never throws" contract (an ABORT_ERROR result, not a throw).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createDebouncedFn<T extends (...args: any[]) => any>(
   fn: T,
   ms: number,
+  onCancel?: () => Awaited<ReturnType<T>>,
 ): CancelableFunction<T> {
   let timer: ReturnType<typeof setTimeout> | null = null
-  const pendingResolvers: Array<{ resolve: (value: ReturnType<T>) => void, reject: (reason: unknown) => void }> = []
+  let pending: Array<Resolver<ReturnType<T>>> = []
 
   const wrapper = (...args: Parameters<T>): Promise<ReturnType<T>> => {
     if (timer) clearTimeout(timer)
 
     return new Promise((resolve, reject) => {
-      pendingResolvers.push({ resolve, reject })
-      timer = setTimeout(async () => {
+      pending.push({ resolve, reject })
+      timer = setTimeout(() => {
         timer = null
-        try {
-          const result = await fn(...args)
-          const resolvers = pendingResolvers.splice(0)
-          for (const r of resolvers) r.resolve(result)
-        }
-        catch (err) {
-          const resolvers = pendingResolvers.splice(0)
-          for (const r of resolvers) r.reject(err)
-        }
+        // Snapshot the window BEFORE invoking fn so later callers start fresh
+        const batch = pending
+        pending = []
+        settleBatch(() => fn(...args), batch)
       }, ms)
     })
   }
@@ -286,9 +343,8 @@ export function createDebouncedFn<T extends (...args: any[]) => any>(
       clearTimeout(timer)
       timer = null
     }
-    // Reject all pending promises so callers are not left dangling
-    const resolvers = pendingResolvers.splice(0)
-    for (const r of resolvers) r.reject(new CancelledError())
+    settleOrReject(pending, onCancel)
+    pending = []
   }
 
   return wrapper
@@ -303,54 +359,53 @@ export function createDebouncedFn<T extends (...args: any[]) => any>(
 export function createThrottledFn<T extends (...args: any[]) => any>(
   fn: T,
   ms: number,
+  onCancel?: () => Awaited<ReturnType<T>>,
 ): CancelableFunction<T> {
   let lastCallTime = 0
   let timer: ReturnType<typeof setTimeout> | null = null
   let pendingArgs: Parameters<T> | null = null
-  const pendingResolvers: Array<{ resolve: (value: ReturnType<T>) => void, reject: (reason: unknown) => void }> = []
+  let pending: Array<Resolver<ReturnType<T>>> = []
 
   const wrapper = (...args: Parameters<T>): Promise<ReturnType<T>> => {
     const now = Date.now()
     const elapsed = now - lastCallTime
 
     if (elapsed >= ms) {
-      // Enough time has passed — execute immediately
+      // Leading edge — execute immediately
       lastCallTime = now
       if (timer) {
         clearTimeout(timer)
         timer = null
       }
-      const resultPromise = Promise.resolve(fn(...args))
-      // Resolve any pending callers from the cleared trailing timer
-      if (pendingResolvers.length > 0) {
-        const resolvers = pendingResolvers.splice(0)
+      const resultPromise = Promise.resolve().then(() => fn(...args)) as Promise<ReturnType<T>>
+      // Settle any callers parked by the now-cancelled trailing timer
+      if (pending.length > 0) {
+        const batch = pending
+        pending = []
+        pendingArgs = null
         resultPromise.then(
-          (result) => { for (const r of resolvers) r.resolve(result) },
-          (err) => { for (const r of resolvers) r.reject(err) },
+          (result) => { for (const r of batch) r.resolve(result) },
+          (err) => { for (const r of batch) r.reject(err) },
         )
       }
       return resultPromise
     }
 
-    // Within throttle window — schedule trailing call
+    // Within the window — schedule a trailing call
     pendingArgs = args
     if (timer) clearTimeout(timer)
 
     return new Promise((resolve, reject) => {
-      pendingResolvers.push({ resolve, reject })
-      timer = setTimeout(async () => {
+      pending.push({ resolve, reject })
+      timer = setTimeout(() => {
         lastCallTime = Date.now()
         timer = null
-        try {
-          const result = await fn(...(pendingArgs as Parameters<T>))
-          const resolvers = pendingResolvers.splice(0)
-          for (const r of resolvers) r.resolve(result)
-        }
-        catch (err) {
-          const resolvers = pendingResolvers.splice(0)
-          for (const r of resolvers) r.reject(err)
-        }
+        // Capture args + resolvers at fire time, before fn runs
+        const callArgs = pendingArgs as Parameters<T>
         pendingArgs = null
+        const batch = pending
+        pending = []
+        settleBatch(() => fn(...callArgs), batch)
       }, ms - elapsed)
     })
   }
@@ -360,10 +415,23 @@ export function createThrottledFn<T extends (...args: any[]) => any>(
       clearTimeout(timer)
       timer = null
     }
-    // Reject all pending promises so callers are not left dangling
-    const resolvers = pendingResolvers.splice(0)
-    for (const r of resolvers) r.reject(new CancelledError())
+    pendingArgs = null
+    settleOrReject(pending, onCancel)
+    pending = []
   }
 
   return wrapper
+}
+
+function settleOrReject<T>(
+  batch: Array<Resolver<T>>,
+  onCancel?: () => T,
+): void {
+  if (onCancel) {
+    const value = onCancel()
+    for (const r of batch) r.resolve(value)
+  }
+  else {
+    for (const r of batch) r.reject(new CancelledError())
+  }
 }

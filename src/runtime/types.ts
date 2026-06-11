@@ -74,6 +74,7 @@ export type ActionErrorCode
     | 'CSRF_ERROR'
     | 'IDEMPOTENCY_KEY_REQUIRED'
     | 'IDEMPOTENCY_KEY_REUSE'
+    | 'IDEMPOTENCY_STORE_ERROR'
     | 'SERVER_ERROR'
     | 'INTERNAL_ERROR'
     | 'FETCH_ERROR'
@@ -485,6 +486,12 @@ export interface RateLimitConfig {
   keyFn?: (event: H3Event) => string
   /** Custom error message. Default: 'Too many requests' */
   message?: string
+  /**
+   * Hard cap on tracked client keys. When exceeded, the oldest entries are
+   * evicted so a spoofed-key flood cannot grow the store without bound.
+   * Default: 100000
+   */
+  maxEntries?: number
 }
 
 // ── CSRF Middleware ──────────────────────────────────────────────

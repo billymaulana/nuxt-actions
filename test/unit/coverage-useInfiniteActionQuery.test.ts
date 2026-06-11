@@ -52,6 +52,29 @@ describe('useInfiniteActionQuery option branches and lifecycle', () => {
     vi.clearAllMocks()
   })
 
+  it('derives the first page from late-arriving async data (SSR/A7 regression)', async () => {
+    /*
+     * The data resolves AFTER setup (like onServerPrefetch). The first page must
+     * still appear via a render-time computed, not an immediate watch that Vue
+     * stops during SSR before the data lands.
+     */
+    mockFetch.mockResolvedValue({ success: true, data: { items: [{ id: 1 }], cursor: 'c2' } })
+
+    const { pages, data, hasNextPage } = useInfiniteActionQuery(createActionRef('feed'), undefined, {
+      getNextPageParam: (p: { cursor?: string }) => p.cursor,
+    })
+
+    // Before the async data settles, the derivation is empty (no crash, no stale watch)
+    expect(pages.value).toHaveLength(0)
+    expect(hasNextPage.value).toBe(false)
+
+    await flushAsync()
+
+    expect(pages.value).toEqual([{ items: [{ id: 1 }], cursor: 'c2' }])
+    expect(data.value).toEqual({ items: [{ id: 1 }], cursor: 'c2' })
+    expect(hasNextPage.value).toBe(true) // nextPageParam reactively derived
+  })
+
   it('has no next page when options are omitted entirely', async () => {
     mockFetch.mockResolvedValue({ success: true, data: { items: [{ id: 1 }] } })
 
@@ -175,22 +198,25 @@ describe('useInfiniteActionQuery option branches and lifecycle', () => {
     })
   })
 
-  it('clears accumulated pages when the owning scope is disposed', async () => {
-    mockFetch.mockResolvedValue({ success: true, data: { items: [{ id: 1 }] } })
+  it('clears client-accumulated extra pages on dispose while the cached first page persists', async () => {
+    mockFetch.mockResolvedValue({ success: true, data: { items: [{ id: 1 }], cursor: 'c2' } })
 
     const scope = effectScope()
     let result: UseInfiniteActionQueryReturn<unknown> | undefined
     scope.run(() => {
       result = useInfiniteActionQuery(createActionRef('list'), undefined, {
-        getNextPageParam: () => undefined,
+        getNextPageParam: (p: { cursor?: string }) => p.cursor,
       })
     })
 
     await flushAsync()
-    expect(result!.pages.value).toHaveLength(1)
+    mockFetch.mockResolvedValue({ success: true, data: { items: [{ id: 2 }] } })
+    await result!.fetchNextPage()
+    expect(result!.pages.value).toHaveLength(2)
 
     scope.stop()
 
-    expect(result!.pages.value).toHaveLength(0)
+    /* Extra (client-fetched) pages are freed; the first page lives in Nuxt's cache. */
+    expect(result!.pages.value).toHaveLength(1)
   })
 })

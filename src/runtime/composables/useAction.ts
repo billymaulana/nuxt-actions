@@ -11,7 +11,7 @@ import type {
   InferActionInput,
   InferActionOutput,
 } from '../types'
-import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, isTimeoutAbort, TIMEOUT_ABORT_REASON } from './_utils'
+import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, abortResult, raceAbort } from './_utils'
 
 /**
  * Composable to call a server action with reactive state management.
@@ -73,9 +73,11 @@ export function useAction(
   const hasSucceeded = computed(() => status.value === 'success')
   const hasErrored = computed(() => status.value === 'error')
 
-  // Dedupe tracking
+  // Dedupe / lifecycle tracking
   let currentController: AbortController | null = null
   let currentPromise: Promise<ActionResult<unknown>> | null = null
+  /* Every in-flight request, so cancel()/reset() abort stragglers, not just the latest. */
+  const live = new Set<AbortController>()
 
   // cancelPrevious is sugar for dedupe: 'cancel'; an explicit dedupe wins
   const dedupe = options.dedupe ?? (options.cancelPrevious ? 'cancel' : undefined)
@@ -93,6 +95,7 @@ export function useAction(
 
     const controller = new AbortController()
     currentController = controller
+    live.add(controller)
 
     const promise = _doExecute(input, controller)
     currentPromise = promise
@@ -101,7 +104,8 @@ export function useAction(
       return await promise
     }
     finally {
-      // Clean up if this was the latest request
+      live.delete(controller)
+      // Clear "latest" tracking only if this was still the latest request
       if (currentPromise === promise) {
         currentPromise = null
         currentController = null
@@ -113,6 +117,8 @@ export function useAction(
     input: unknown,
     controller: AbortController,
   ): Promise<ActionResult<unknown>> {
+    /* Only the latest call writes the shared reactive state; stragglers are observers. */
+    const isLatest = () => currentController === controller
     options.onExecute?.(input)
     const startedAt = Date.now()
     emitActionHook(nuxtApp, 'action:start', { path, method, input })
@@ -121,32 +127,44 @@ export function useAction(
     error.value = null
 
     /*
-     * ofetch silently ignores its timeout option when an external signal is
-     * provided, so the timeout is enforced here on the owned controller.
+     * ofetch ignores its timeout option when an external signal is provided,
+     * so the deadline is enforced here. Aborting with no reason produces a
+     * real AbortError that stops ofetch's retry loop (a string reason would
+     * leave it spinning through every remaining backoff). `timedOut`
+     * distinguishes a timeout from a manual cancel.
      */
+    let timedOut = false
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined
     if (options.timeout && options.timeout > 0) {
-      timeoutTimer = setTimeout(() => controller.abort(TIMEOUT_ABORT_REASON), options.timeout)
+      timeoutTimer = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, options.timeout)
     }
 
-    try {
-      const fetchOptions = buildFetchOptions({
-        method,
-        input,
-        headers: options.headers,
-        retry: options.retry,
-        signal: controller.signal,
-      })
+    const fetchOptions = buildFetchOptions({
+      method,
+      input,
+      headers: options.headers,
+      retry: options.retry,
+      signal: controller.signal,
+    })
+    const fetchPromise = appFetch<ActionResult<unknown>>(path, fetchOptions)
 
-      const result = await appFetch<ActionResult<unknown>>(
-        path,
-        fetchOptions,
-      )
+    try {
+      /*
+       * Race the request against its own abort so execute() settles the
+       * instant the signal fires, instead of waiting out an in-progress
+       * retry backoff sleep inside ofetch.
+       */
+      const result = await raceAbort(fetchPromise, controller.signal)
 
       const durationMs = Date.now() - startedAt
       if (result.success) {
-        data.value = options.transform ? options.transform(result.data as never) : result.data
-        status.value = 'success'
+        if (isLatest()) {
+          data.value = options.transform ? options.transform(result.data as never) : result.data
+          status.value = 'success'
+        }
         options.onSuccess?.(result.data)
         options.onSettled?.(result)
         emitActionHook(nuxtApp, 'action:success', { path, method, input, data: result.data, durationMs })
@@ -154,8 +172,10 @@ export function useAction(
         return result
       }
       else {
-        error.value = result.error
-        status.value = 'error'
+        if (isLatest()) {
+          error.value = result.error
+          status.value = 'error'
+        }
         options.onError?.(result.error)
         options.onSettled?.(result)
         emitActionHook(nuxtApp, 'action:error', { path, method, input, error: result.error, durationMs })
@@ -171,15 +191,17 @@ export function useAction(
        * AbortError in a FetchError, so the thrown value's identity is not
        * reliable across runtimes.
        */
-      if (isAbortRejection(err, controller.signal)) {
-        if (isTimeoutAbort(controller.signal)) {
+      if (timedOut || isAbortRejection(err, controller.signal)) {
+        if (timedOut) {
           const timeoutError: ActionError = {
             code: 'TIMEOUT_ERROR',
             message: `Request timed out after ${options.timeout}ms`,
             statusCode: 408,
           }
-          error.value = timeoutError
-          status.value = 'error'
+          if (isLatest()) {
+            error.value = timeoutError
+            status.value = 'error'
+          }
           const result: ActionResult<unknown> = { success: false, error: timeoutError }
           options.onError?.(timeoutError)
           options.onSettled?.(result)
@@ -188,20 +210,14 @@ export function useAction(
           return result
         }
 
-        /*
-         * A stale aborted request (cancelPrevious/dedupe) must not clobber
-         * the state of a newer in-flight call.
-         */
-        if (currentController === controller) {
+        // A stale aborted request must not clobber a newer in-flight call.
+        if (isLatest()) {
           status.value = 'idle'
         }
-        const abortResult: ActionResult<unknown> = {
-          success: false,
-          error: { code: 'ABORT_ERROR', message: 'Request was aborted', statusCode: 0 },
-        }
-        options.onSettled?.(abortResult)
-        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result: abortResult, durationMs })
-        return abortResult
+        const aborted = abortResult()
+        options.onSettled?.(aborted)
+        emitActionHook(nuxtApp, 'action:settled', { path, method, input, result: aborted, durationMs })
+        return aborted
       }
 
       const actionError: ActionError = {
@@ -210,8 +226,10 @@ export function useAction(
         statusCode: 0,
       }
 
-      error.value = actionError
-      status.value = 'error'
+      if (isLatest()) {
+        error.value = actionError
+        status.value = 'error'
+      }
 
       const result: ActionResult<unknown> = { success: false, error: actionError }
       options.onError?.(actionError)
@@ -223,16 +241,20 @@ export function useAction(
     }
     finally {
       if (timeoutTimer) clearTimeout(timeoutTimer)
+      // Swallow the loser of the race (ofetch may reject later after retries)
+      fetchPromise.catch(() => {})
     }
   }
 
+  function abortAll() {
+    for (const controller of live) controller.abort()
+    live.clear()
+    currentController = null
+    currentPromise = null
+  }
+
   function reset() {
-    // Abort any in-flight request
-    if (currentController) {
-      currentController.abort()
-      currentController = null
-      currentPromise = null
-    }
+    abortAll()
     data.value = null
     error.value = null
     status.value = 'idle'
@@ -241,30 +263,29 @@ export function useAction(
   // Wrap execute with debounce or throttle if configured (debounce takes priority)
   let wrappedExecute = execute
   if (options.debounce && options.debounce > 0) {
-    wrappedExecute = createDebouncedFn(execute, options.debounce) as unknown as typeof execute
+    wrappedExecute = createDebouncedFn(execute, options.debounce, abortResult) as unknown as typeof execute
   }
   else if (options.throttle && options.throttle > 0) {
-    wrappedExecute = createThrottledFn(execute, options.throttle) as unknown as typeof execute
+    wrappedExecute = createThrottledFn(execute, options.throttle, abortResult) as unknown as typeof execute
   }
 
   function cancel() {
     if (wrappedExecute !== execute && 'cancel' in wrappedExecute) {
       (wrappedExecute as { cancel: () => void }).cancel()
     }
-    currentController?.abort()
+    for (const controller of live) controller.abort()
+    live.clear()
+    currentController = null
+    currentPromise = null
+    // Explicit cancel returns to idle without clearing data/error.
+    if (status.value === 'executing') status.value = 'idle'
   }
 
   // Clean up timers and in-flight requests on scope dispose
   if (wrappedExecute !== execute && 'cancel' in wrappedExecute) {
     onScopeDispose(() => (wrappedExecute as { cancel: () => void }).cancel())
   }
-  onScopeDispose(() => {
-    if (currentController) {
-      currentController.abort()
-      currentController = null
-      currentPromise = null
-    }
-  })
+  onScopeDispose(abortAll)
 
   // Defined after wrappedExecute so debounce/throttle is respected
   async function executeAsync(input: unknown): Promise<unknown> {

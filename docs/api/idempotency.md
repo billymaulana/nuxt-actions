@@ -109,6 +109,7 @@ For multi-instance deployments, implement the two-method interface over shared s
 |------|--------|------|
 | `IDEMPOTENCY_KEY_REQUIRED` | 400 | `required: true` and no key present |
 | `IDEMPOTENCY_KEY_REUSE` | 422 | Same key, different payload |
+| `IDEMPOTENCY_STORE_ERROR` | 503 | The store (or a key/scope resolver) failed — fails closed without running the handler |
 
 ## See Also
 

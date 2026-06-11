@@ -19,12 +19,17 @@ const mockRefresh = vi.fn()
 const mockClear = vi.fn()
 
 const mockUseAsyncData = vi.fn((_key: string, handler: () => Promise<unknown>, _opts?: unknown) => {
+  const data = ref<unknown>(null)
   const asyncDataResult = {
-    data: ref<unknown>(null),
+    data,
     status: ref<string>('idle'),
     pending: ref(false),
     refresh: mockRefresh,
-    clear: mockClear,
+    /* Mirror Nuxt: clear() empties cached data so the derived first page drops. */
+    clear: vi.fn(() => {
+      data.value = null
+      mockClear()
+    }),
   }
   handler().then((result) => {
     asyncDataResult.data.value = result

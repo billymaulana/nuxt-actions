@@ -120,21 +120,23 @@ describe('abort detection with realistic ofetch rejections', () => {
     expect(action.status.value).toBe('success')
   })
 
-  it('cancel() also flushes a pending debounced execution', async () => {
+  it('cancel() settles a pending debounced execution with an ABORT_ERROR result (never throws)', async () => {
     vi.useFakeTimers()
     mockFetch.mockResolvedValue({ success: true, data: 1 })
     const action = useAction('/api/test', { debounce: 200 })
 
-    const pending = action.execute({}).catch(() => 'cancelled')
+    const pending = action.execute({})
     action.cancel()
     vi.advanceTimersByTime(250)
 
-    expect(await pending).toBe('cancelled')
+    const result = await pending
+    expect(result.success).toBe(false)
+    if (!result.success) expect(result.error.code).toBe('ABORT_ERROR')
     expect(mockFetch).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
 
-  it('optimistic cancel() also flushes a pending debounced execution', async () => {
+  it('optimistic cancel() settles a pending debounced execution with an ABORT_ERROR result', async () => {
     vi.useFakeTimers()
     mockFetch.mockResolvedValue({ success: true, data: 1 })
     const todos = ref([{ id: 1, done: false }])
@@ -144,11 +146,13 @@ describe('abort detection with realistic ofetch rejections', () => {
       updateFn: (_input: unknown, current: Array<{ id: number, done: boolean }>) => current,
     })
 
-    const pending = action.execute({ id: 1 }).catch(() => 'cancelled')
+    const pending = action.execute({ id: 1 })
     action.cancel()
     vi.advanceTimersByTime(250)
 
-    expect(await pending).toBe('cancelled')
+    const result = await pending
+    expect(result.success).toBe(false)
+    if (!result.success) expect(result.error.code).toBe('ABORT_ERROR')
     expect(mockFetch).not.toHaveBeenCalled()
     vi.useRealTimers()
   })

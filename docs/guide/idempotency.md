@@ -44,6 +44,7 @@ The behavior follows the industry convention (Stripe-style):
 | Concurrent duplicate (in flight) | Awaits the original execution; handler runs once |
 | Missing key with `required: true` | `400 IDEMPOTENCY_KEY_REQUIRED` |
 | First request **failed** | Nothing is stored — the client may retry with the same key |
+| Store/resolver outage | `503 IDEMPOTENCY_STORE_ERROR` — fails closed (the handler is not run) rather than risking a double-execution |
 
 Only successful results are stored. Failures stay retryable by design.
 

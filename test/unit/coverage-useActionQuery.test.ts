@@ -97,7 +97,7 @@ describe('useActionQuery enabled ref and polling lifecycle', () => {
     expect(mockRefresh).not.toHaveBeenCalled()
   })
 
-  it('stops polling when the owning scope is disposed', () => {
+  it('never starts a polling interval on the server (SSR leak guard)', () => {
     vi.useFakeTimers()
     mockFetch.mockResolvedValue({ success: true, data: {} })
 
@@ -106,12 +106,9 @@ describe('useActionQuery enabled ref and polling lifecycle', () => {
       useActionQuery(createActionRef('polling'), undefined, { refetchInterval: 1000 })
     })
 
-    vi.advanceTimersByTime(1000)
-    expect(mockRefresh).toHaveBeenCalledTimes(1)
-
-    scope.stop()
-
+    /* import.meta.client is falsy in node — polling must not run server-side */
     vi.advanceTimersByTime(5000)
-    expect(mockRefresh).toHaveBeenCalledTimes(1)
+    expect(mockRefresh).not.toHaveBeenCalled()
+    scope.stop()
   })
 })
