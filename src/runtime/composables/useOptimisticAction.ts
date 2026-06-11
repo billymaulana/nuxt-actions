@@ -241,6 +241,12 @@ export function useOptimisticAction(
     for (const controller of live) controller.abort()
     live.clear()
     currentController = null
+    /*
+     * Advance the latest-call barrier so a straggler whose raceAbort already
+     * resolved (abort lost the microtask race) can't write back over a reset()/
+     * cancel(). A fresh execute() bumps callCounter again and re-becomes latest.
+     */
+    callCounter++
   }
 
   function reset() {

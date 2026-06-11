@@ -197,6 +197,44 @@ describe('iter2: useInfiniteActionQuery fetchNextPage races refresh()', () => {
   })
 })
 
+describe('iter4: reset()/cancel() are not clobbered by an already-resolved straggler', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('reset() during the success microtask window keeps the cleared state', async () => {
+    mockFetch.mockResolvedValueOnce({ success: true, data: [9, 9, 9] })
+    const src = ref([1])
+    const action = useOptimisticAction('/api/x', {
+      currentData: src,
+      updateFn: (_i: unknown, current: number[]) => current,
+    })
+
+    const p = action.execute({})
+    await Promise.resolve() // straggler's resolve is queued but its continuation hasn't run
+    action.reset()
+    await p // straggler's success continuation drains
+
+    expect(action.status.value).toBe('idle')
+    expect(action.optimisticData.value).toEqual([1])
+    expect(action.data.value).toBeNull()
+  })
+
+  it('cancel() during the success microtask window stays idle', async () => {
+    mockFetch.mockResolvedValueOnce({ success: true, data: [9, 9, 9] })
+    const src = ref([1])
+    const action = useOptimisticAction('/api/x', {
+      currentData: src,
+      updateFn: (_i: unknown, current: number[]) => current,
+    })
+
+    const p = action.execute({})
+    await Promise.resolve()
+    action.cancel()
+    await p
+
+    expect(action.status.value).toBe('idle')
+  })
+})
+
 describe('iter3: useInfiniteActionQuery surfaces a first-page envelope error', () => {
   beforeEach(() => vi.clearAllMocks())
 
