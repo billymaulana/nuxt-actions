@@ -1,13 +1,13 @@
-import { defineEventHandler, readBody, getQuery, createEventStream } from 'h3'
-import type { H3Event, EventStream } from 'h3'
+import type { EventStream, ServerEvent } from '../internal/nitro-compact'
+import { createEventStream, defineEventHandler, getQuery, readBody } from '../internal/nitro-compact'
 import type {
-  StandardSchemaV1,
-  InferOutput,
-  ActionMiddleware,
-  ActionMetadata,
   ActionError,
+  ActionMetadata,
+  ActionMiddleware,
+  InferOutput,
+  StandardSchemaV1,
 } from '../../types'
-import { formatStandardIssues, runMiddleware, isActionError } from './defineAction'
+import { formatStandardIssues, isActionError, runMiddleware } from './defineAction'
 
 interface StreamActionSender<TChunk = unknown> {
   /** Send a data chunk to the client (no-op once the stream is closed). */
@@ -37,7 +37,7 @@ interface DefineStreamActionOptions<
   /** The streaming handler function */
   handler: (params: {
     input: InferOutput<TInputSchema>
-    event: H3Event
+    event: ServerEvent
     ctx: TCtx
     stream: StreamActionSender<TChunk>
   }) => Promise<void>
@@ -67,7 +67,7 @@ export function defineStreamAction<
 >(options: DefineStreamActionOptions<TInputSchema, TChunk, TCtx>) {
   type TInput = TInputSchema extends StandardSchemaV1<infer I, unknown> ? I : unknown
 
-  const handler = defineEventHandler(async (event: H3Event) => {
+  const handler = defineEventHandler(async (event: ServerEvent) => {
     try {
       // 1. Parse input
       const method = event.method.toUpperCase()

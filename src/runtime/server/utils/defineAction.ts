@@ -1,14 +1,14 @@
-import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from 'h3'
-import type { H3Event, MultiPartData } from 'h3'
+import { defineEventHandler, getHeader, getQuery, readBody, readMultipartFormData } from '../internal/nitro-compact'
+import type { ServerEvent, MultiPartData } from '../internal/nitro-compact'
 import type {
-  StandardSchemaV1,
-  InferOutput,
-  ActionMiddleware,
-  ActionHandler,
   ActionError,
+  ActionHandler,
   ActionMetadata,
+  ActionMiddleware,
   ActionResult,
   IdempotencyConfig,
+  InferOutput,
+  StandardSchemaV1,
 } from '../../types'
 import { executeWithIdempotency } from './idempotency'
 
@@ -72,7 +72,7 @@ export function defineAction<
 >(options: DefineActionOptions<TInputSchema, TOutput, TCtx, TOutputSchema>) {
   type TInput = TInputSchema extends StandardSchemaV1<infer I, unknown> ? I : unknown
 
-  async function _execute(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
+  async function _execute(rawInput: unknown, event: ServerEvent): Promise<ActionResult<TOutput>> {
     if (options.idempotency) {
       return executeWithIdempotency(
         event,
@@ -84,7 +84,7 @@ export function defineAction<
     return _run(rawInput, event)
   }
 
-  async function _run(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
+  async function _run(rawInput: unknown, event: ServerEvent): Promise<ActionResult<TOutput>> {
     try {
       // 1. Validate input with Standard Schema
       let input = rawInput
@@ -197,7 +197,7 @@ export function defineAction<
     }
   }
 
-  const handler = defineEventHandler(async (event: H3Event) => {
+  const handler = defineEventHandler(async (event: ServerEvent) => {
     let rawInput: unknown
     try {
       rawInput = await parseInput(event)
@@ -262,7 +262,7 @@ export function foldMultipartData(parts: MultiPartData[]): Record<string, unknow
   return out
 }
 
-async function parseInput(event: H3Event): Promise<unknown> {
+async function parseInput(event: ServerEvent): Promise<unknown> {
   const method = event.method.toUpperCase()
 
   if (method === 'GET' || method === 'HEAD') {
@@ -374,7 +374,7 @@ function deepMerge(
 }
 
 export async function runMiddleware(
-  event: H3Event,
+  event: ServerEvent,
   middlewares: ActionMiddleware[],
   metadata: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {

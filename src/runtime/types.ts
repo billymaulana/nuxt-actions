@@ -1,5 +1,5 @@
 import type { Ref, ComputedRef } from 'vue'
-import type { H3Event } from 'h3'
+import type { ServerEvent } from './server/internal/nitro-compact'
 
 // ── Standard Schema v1 ────────────────────────────────────────────
 // Inlined to avoid external dependency. Compatible with Zod 3.24+,
@@ -101,7 +101,7 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
 // ── Middleware ─────────────────────────────────────────────────────
 
 export interface MiddlewareContext<TCtx = Record<string, unknown>> {
-  event: H3Event
+  event: ServerEvent
   ctx: TCtx
   metadata: ActionMetadata
 }
@@ -117,7 +117,7 @@ export type ActionMiddleware<
 
 export type ActionHandler<TInput, TOutput, TCtx = Record<string, unknown>> = (params: {
   input: TInput
-  event: H3Event
+  event: ServerEvent
   ctx: TCtx
 }) => TOutput | Promise<TOutput>
 
@@ -162,8 +162,8 @@ export interface AuthMiddlewareOptions {
  * generated #actions template can infer end-to-end types for builder actions.
  */
 export type BuiltAction<TInput, TOutput>
-  = ReturnType<typeof import('h3')['defineEventHandler']> & {
-    _execute: (rawInput: unknown, event: H3Event) => Promise<ActionResult<TOutput>>
+  = ReturnType<typeof import('./server/internal/nitro-compact')['defineEventHandler']> & {
+    _execute: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
     _types: { readonly input: TInput, readonly output: TOutput }
   }
 
@@ -211,7 +211,7 @@ export type InferActionOutput<T>
 // ── defineAction Return (with phantom types) ─────────────────────
 
 export interface TypedActionHandler<TInput = unknown, TOutput = unknown> {
-  _execute: (rawInput: unknown, event: H3Event) => Promise<ActionResult<TOutput>>
+  _execute: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
   _types: { readonly input: TInput, readonly output: TOutput }
 }
 
@@ -483,7 +483,7 @@ export interface RateLimitConfig {
   /** Time window in milliseconds. Default: 60000 (1 minute) */
   window?: number
   /** Custom key function to identify the client. Default: IP address */
-  keyFn?: (event: H3Event) => string
+  keyFn?: (event: ServerEvent) => string
   /** Custom error message. Default: 'Too many requests' */
   message?: string
   /**
@@ -590,13 +590,13 @@ export interface IdempotencyConfig {
   /** Reject requests without a key (400 IDEMPOTENCY_KEY_REQUIRED). Default: false */
   required?: boolean
   /** Custom key resolver — overrides the header lookup. Return null/undefined for "no key". */
-  key?: (event: H3Event) => string | null | undefined | Promise<string | null | undefined>
+  key?: (event: ServerEvent) => string | null | undefined | Promise<string | null | undefined>
   /**
    * Identity component mixed into the store key (e.g. the session user id).
    * Replay happens before middleware/auth runs, so without a scope any client
    * presenting the same key could replay another client's stored result.
    */
-  scope?: (event: H3Event) => string | Promise<string>
+  scope?: (event: ServerEvent) => string | Promise<string>
   /** Pluggable storage. Default: a per-process in-memory store with TTL pruning. */
   store?: IdempotencyStore
 }

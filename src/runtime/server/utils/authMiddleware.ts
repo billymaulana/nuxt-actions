@@ -1,4 +1,4 @@
-import type { H3Event } from 'h3'
+import type { ServerEvent } from '../internal/nitro-compact'
 import type { ActionMiddleware, AuthMiddlewareOptions } from '../../types'
 import { createActionError } from './defineAction'
 
@@ -14,7 +14,7 @@ import { createActionError } from './defineAction'
  * ```
  */
 export function defineAuthMiddleware<TUser>(
-  resolve: (event: H3Event) => TUser | null | undefined | Promise<TUser | null | undefined>,
+  resolve: (event: ServerEvent) => TUser | null | undefined | Promise<TUser | null | undefined>,
   opts: AuthMiddlewareOptions = {},
 ): ActionMiddleware<Record<string, unknown>, { user: TUser | null }> {
   return async ({ event, next }) => {

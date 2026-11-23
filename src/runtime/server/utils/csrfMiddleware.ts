@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { getCookie, setCookie, getHeader } from 'h3'
+import { getCookie, setCookie, getHeader } from '../internal/nitro-compact'
 import type { CsrfConfig, ActionMiddleware } from '../../types'
 import { createActionError } from './defineAction'
 

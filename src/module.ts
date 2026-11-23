@@ -8,6 +8,7 @@ import {
   createResolver,
   useLogger,
   updateTemplates,
+  resolveServerVariant,
 } from '@nuxt/kit'
 import { setupDevtools } from './devtools'
 
@@ -161,7 +162,7 @@ function generateHandlerCode(action: ScannedAction): string {
   // Safely escape the import path using JSON.stringify
   const importPath = JSON.stringify(action.filePath.split('\\').join('/'))
   return [
-    `import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from 'h3'`,
+    `import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from '#nuxt-actions/nitro-compact'`,
     `import actionModule from ${importPath}`,
     ``,
     `function _foldMultipart(parts) {`,
@@ -265,6 +266,13 @@ export default defineNuxtModule<ModuleOptions>({
 
     const logger = useLogger('nuxt-actions')
     const resolver = createResolver(import.meta.url)
+
+    // Virtual import alias for server compact
+    const nitro2 = resolver.resolve('./runtime/server/internal/nitro2')
+    nuxt.options.alias['#nuxt-actions/nitro-compact'] = resolveServerVariant({
+      nitro2,
+      nuxt: resolver.resolve('./runtime/server/internal/nitro3'),
+    }) ?? nitro2
 
     // Auto-import server utilities: defineAction, createActionError, defineMiddleware
     addServerImportsDir(resolver.resolve('./runtime/server/utils'))

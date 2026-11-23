@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -13,6 +14,11 @@ export default defineConfig({
         functions: 100,
         lines: 100,
       },
+    },
+  },
+  resolve: {
+    alias: {
+      '#nuxt-actions/nitro-compact': resolve('./src/runtime/server/internal/nitro2.ts'),
     },
   },
 })

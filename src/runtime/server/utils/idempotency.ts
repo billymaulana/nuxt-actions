@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { getHeader, setHeader } from 'h3'
-import type { H3Event } from 'h3'
+import { getHeader, setHeader } from '../internal/nitro-compact'
+import type { ServerEvent } from '../internal/nitro-compact'
 import type {
   ActionResult,
   IdempotencyConfig,
@@ -94,7 +94,7 @@ const inflight = new Map<string, { fingerprint: string, promise: Promise<ActionR
  * so one client can never replay another client's result.
  */
 export async function executeWithIdempotency(
-  event: H3Event,
+  event: ServerEvent,
   rawInput: unknown,
   config: IdempotencyConfig,
   run: () => Promise<ActionResult<unknown>>,
