@@ -55,7 +55,7 @@
   "bin": {
     "nuxt-actions": "./bin/nuxt-actions.mjs"
   },
-  "packageManager": "pnpm@10.27.0",
+  "packageManager": "pnpm@12.6.0",
   "scripts": {
     "prepack": "nuxt-module-build build",
     "dev": "npm run dev:prepare && nuxt dev playground",
@@ -73,7 +73,7 @@
     "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
-    "@nuxt/kit": "^3.7.0 || ^4.0.0"
+    "@nuxt/kit": "^4.6.4"
   },
   "peerDependencies": {
     "arktype": ">=2.1.0",
@@ -94,25 +94,31 @@
   "pnpm": {
     "overrides": {
       "vitepress>vite": "^6.4.2"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "esbuild"
+    ]
   },
   "devDependencies": {
-    "@nuxt/devtools": "^3.2.4",
-    "@nuxt/eslint-config": "^1.15.2",
-    "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/schema": "^4.4.8",
-    "@nuxt/test-utils": "^4.0.3",
+    "@nuxt/devtools": "^4.2.0",
+    "@nuxt/eslint-config": "^1.17.0",
+    "@nuxt/module-builder": "^1.0.4",
+    "@nuxt/schema": "^4.6.4",
+    "@nuxt/test-utils": "^4.4.0",
     "@types/node": "latest",
-    "@vitest/coverage-v8": "^4.1.8",
-    "arktype": "^2.2.0",
+    "@vitest/coverage-v8": "^4.1.12",
+    "arktype": "^2.2.10",
     "changelogen": "^0.6.2",
-    "eslint": "^10.4.1",
-    "nuxt": "^4.4.8",
-    "typescript": "~5.9.3",
-    "valibot": "^1.4.1",
+    "eslint": "^10.15.0",
+    "h3": "^1.15.11",
+    "nuxt": "^4.6.4",
+    "typescript": "~6.0.3",
+    "valibot": "^1.5.0",
     "vitepress": "^1.6.4",
-    "vitest": "^4.1.8",
-    "vue-tsc": "^3.3.4",
-    "zod": "^4.4.3"
+    "vitest": "^4.1.12",
+    "vue": "^3.5.46",
+    "vue-tsc": "^3.3.14",
+    "zod": "^4.6.7"
   }
 }
