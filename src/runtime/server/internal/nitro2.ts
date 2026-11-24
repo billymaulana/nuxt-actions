@@ -28,3 +28,7 @@ export {
   type EventStream,
   type MultiPartData,
 }
+
+export function getRequestMethod(event: ServerEvent): string {
+  return event.method
+}
