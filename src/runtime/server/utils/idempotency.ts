@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { getHeader, setHeader } from '../internal/nitro-compact'
+import { getHeader, setHeader, getRequestPath } from '../internal/nitro-compact'
 import type { ServerEvent } from '../internal/nitro-compact'
 import type {
   ActionResult,
@@ -131,7 +131,7 @@ export async function executeWithIdempotency(
     return run()
   }
 
-  const storeKey = composeStoreKey(event.path, scope, rawKey)
+  const storeKey = composeStoreKey(getRequestPath(event), scope, rawKey)
   const fingerprint = fingerprintOf(rawInput)
   const store = config.store ?? defaultStore
   const ttl = config.ttl ?? DEFAULT_TTL

@@ -32,3 +32,7 @@ export {
 export function getRequestMethod(event: ServerEvent): string {
   return event.method
 }
+
+export function getRequestPath(event: ServerEvent): string {
+  return event.path
+}

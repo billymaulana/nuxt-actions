@@ -137,3 +137,7 @@ export function createEventStream(event: ServerEvent): EventStream {
 export function getRequestMethod(event: ServerEvent): string {
   return event.req.method
 }
+
+export function getRequestPath(event: ServerEvent): string {
+  return event.url.pathname
+}
