@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { getCookie, setCookie, getHeader } from '../internal/nitro-compact'
+import { getCookie, setCookie, getHeader, getRequestMethod } from '../internal/nitro-compact'
 import type { CsrfConfig, ActionMiddleware } from '../../types'
 import { createActionError } from './defineAction'
 
@@ -51,7 +51,7 @@ export function csrfMiddleware(config?: CsrfConfig): ActionMiddleware {
   const tokenLength = config?.tokenLength ?? 32
 
   return async ({ event, next }) => {
-    const method = event.method.toUpperCase()
+    const method = getRequestMethod(event).toUpperCase()
 
     if (!MUTATION_METHODS.has(method)) {
       // Safe request — generate and set a CSRF token cookie

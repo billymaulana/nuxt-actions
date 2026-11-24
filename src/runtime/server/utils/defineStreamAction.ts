@@ -1,5 +1,5 @@
 import type { EventStream, ServerEvent } from '../internal/nitro-compact'
-import { createEventStream, defineEventHandler, getQuery, readBody } from '../internal/nitro-compact'
+import { createEventStream, defineEventHandler, getQuery, readBody, getRequestMethod } from '../internal/nitro-compact'
 import type {
   ActionError,
   ActionMetadata,
@@ -70,7 +70,7 @@ export function defineStreamAction<
   const handler = defineEventHandler(async (event: ServerEvent) => {
     try {
       // 1. Parse input
-      const method = event.method.toUpperCase()
+      const method = getRequestMethod(event).toUpperCase()
       let rawInput: unknown
       if (method === 'GET' || method === 'HEAD') {
         rawInput = getQuery(event)

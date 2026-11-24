@@ -1,4 +1,4 @@
-import { defineEventHandler, getHeader, getQuery, readBody, readMultipartFormData } from '../internal/nitro-compact'
+import { defineEventHandler, getHeader, getQuery, readBody, readMultipartFormData, getRequestMethod } from '../internal/nitro-compact'
 import type { ServerEvent, MultiPartData } from '../internal/nitro-compact'
 import type {
   ActionError,
@@ -263,7 +263,7 @@ export function foldMultipartData(parts: MultiPartData[]): Record<string, unknow
 }
 
 async function parseInput(event: ServerEvent): Promise<unknown> {
-  const method = event.method.toUpperCase()
+  const method = getRequestMethod(event).toUpperCase()
 
   if (method === 'GET' || method === 'HEAD') {
     return getQuery(event)

@@ -162,7 +162,7 @@ function generateHandlerCode(action: ScannedAction): string {
   // Safely escape the import path using JSON.stringify
   const importPath = JSON.stringify(action.filePath.split('\\').join('/'))
   return [
-    `import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from '#nuxt-actions/nitro-compact'`,
+    `import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData, getRequestMethod } from '#nuxt-actions/nitro-compact'`,
     `import actionModule from ${importPath}`,
     ``,
     `function _foldMultipart(parts) {`,
@@ -180,7 +180,7 @@ function generateHandlerCode(action: ScannedAction): string {
     `  if (typeof actionModule._execute === 'function') {`,
     `    let rawInput`,
     `    try {`,
-    `      const method = event.method.toUpperCase()`,
+    `      const method = getRequestMethod(event).toUpperCase()`,
     `      const ct = getHeader(event, 'content-type') || ''`,
     `      if (method === 'GET' || method === 'HEAD') {`,
     `        rawInput = getQuery(event)`,
