@@ -1,18 +1,20 @@
+---
+description: "Run logic before every action with typed middleware: authenticate, rate limit, log, and pass data to handlers through a shared context."
+---
+
 # Middleware
 
 Middleware in `nuxt-actions` runs **before** your action handler. Each middleware function can inspect the request, add data to a shared context object, or reject the request entirely by throwing an error. This makes middleware the natural home for cross-cutting concerns such as authentication, authorization, rate limiting, and logging.
 
 ::: tip Working example
-See middleware with auth validation in the [example /middleware page](https://github.com/billymaulana/nuxt-actions-example/blob/master/pages/middleware.vue) and the [login action](https://github.com/billymaulana/nuxt-actions-example/blob/master/server/actions/login.post.ts).
+See middleware with auth validation in the [example /middleware page](/examples/middleware) and the [login action](/examples/middleware#server-actions).
 :::
 
 ## How It Works
 
-When you attach middleware to an action, the module runs each middleware function in array order. Every middleware receives the H3 event, the accumulated context from all previous middleware, and a `next` function that you **must** call to continue the chain. When the entire chain completes, the accumulated context is passed to the action handler.
+When you attach middleware to an action, the module runs each middleware function in array order. Every middleware receives the request event, the accumulated context from all previous middleware, and a `next` function that you **must** call to continue the chain. When the entire chain completes, the accumulated context is passed to the action handler.
 
-```
-Request -> middleware[0] -> middleware[1] -> ... -> handler({ input, event, ctx })
-```
+<FlowSteps :steps="['Request', 'Validate input', 'middleware[0]', 'middleware[1]', '...', 'handler({ input, event, ctx })']" />
 
 If any middleware throws an error, the chain short-circuits and the error is returned to the client immediately. The handler never executes.
 
@@ -27,6 +29,10 @@ export const logMiddleware = defineMiddleware(async ({ event, next }) => {
   return next()
 })
 ```
+
+::: tip Nitro v3
+`event.method` and `event.path` come from h3 v1 and only exist on Nitro v2. On Nitro v3, read `event.req.method` and `getRequestURL(event)` from `nuxt/server`, which also work on Nitro v2 with Nuxt 4.6 or later. See [Server Runtimes](/guide/server-runtimes).
+:::
 
 Attach it to any action via the `middleware` array:
 
@@ -294,28 +300,25 @@ export const rateLimitMiddleware = defineMiddleware(async ({ event, next }) => {
 
 ### Logging Middleware
 
-Record timing and metadata for every action execution.
+Attach a request ID to the context and log who called which action.
 
 ```ts
 // server/utils/logging.ts
 export const loggingMiddleware = defineMiddleware(async ({ event, ctx, next }) => {
-  const start = performance.now()
   const requestId = crypto.randomUUID()
 
-  const result = await next({ ctx: { requestId } })
-
-  const duration = Math.round(performance.now() - start)
   console.log(JSON.stringify({
     requestId,
     method: event.method,
     path: event.path,
     userId: ctx.user?.id ?? 'anonymous',
-    duration: `${duration}ms`,
   }))
 
-  return result
+  return next({ ctx: { requestId } })
 })
 ```
+
+`next()` resolves as soon as the context is merged, before the handler runs, so code placed after `await next()` cannot measure how long the handler took. Time the work inside the handler, or measure whole requests in a Nitro server plugin.
 
 ### Composing Middleware with the Builder Pattern
 

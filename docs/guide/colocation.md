@@ -1,3 +1,7 @@
+---
+description: "Place action files next to the pages that use them with the colocate option, in addition to the server/actions directory."
+---
+
 # Action Colocation
 
 By default, `nuxt-actions` scans `server/actions/` for action files. With the `colocate` option, you can also place action files alongside your pages for better code organization.

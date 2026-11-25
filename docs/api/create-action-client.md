@@ -1,3 +1,7 @@
+---
+description: "API reference for createActionClient: the immutable builder for actions with shared middleware, schemas, metadata, and idempotency."
+---
+
 # createActionClient()
 
 Create a builder-based action client for composing actions with shared middleware, schemas, and metadata. Each method returns a new immutable instance, making it safe to share and extend base clients across multiple actions.
@@ -44,19 +48,27 @@ const client = createActionClient({
 
 ## ActionClient Methods
 
-The `ActionClient<TCtx>` interface exposes four methods. Each returns a new instance (immutable builder pattern).
+The `ActionClient<TCtx>` interface exposes these methods. Each returns a new instance (immutable builder pattern).
 
 ```ts
-interface ActionClient<TCtx = Record<string, never>> {
-  use: <TNewCtx extends Record<string, unknown>>(
-    middleware: ActionMiddleware<TCtx, TNewCtx>,
-  ) => ActionClient<TCtx & TNewCtx>
+interface ActionClient<TCtx = Record<string, unknown>> {
+  use: {
+    <TNewCtx extends Record<string, unknown>>(
+      middleware: ActionMiddleware<TCtx, TNewCtx>,
+    ): ActionClient<TCtx & TNewCtx>
+    /** A middleware that adds no typed context, such as the built-in ones, keeps the context collected so far. */
+    (middleware: ActionMiddleware): ActionClient<TCtx>
+  }
 
   schema: <TInputSchema extends StandardSchemaV1>(
     inputSchema: TInputSchema,
   ) => ActionClientWithSchema<TCtx, TInputSchema>
 
   metadata: (meta: ActionMetadata) => ActionClient<TCtx>
+
+  idempotency: (config?: IdempotencyConfig) => ActionClient<TCtx>
+
+  cache: (config: ActionCacheConfig<unknown, TCtx>) => ActionClient<TCtx>
 
   action: <TOutput>(
     handler: ActionHandler<unknown, TOutput, TCtx>,
@@ -124,6 +136,22 @@ const client = createActionClient()
   .metadata({ role: 'admin', action: 'list-users' })
 ```
 
+### `.cache(config)`
+
+Cache successful `GET` and `HEAD` results of actions built from the client, after its middleware. Available on both `ActionClient` and `ActionClientWithSchema`; after `.schema()`, `key` receives the typed input. See [Caching](/guide/caching).
+
+```ts
+export default createActionClient()
+  .use(requireUser)
+  .schema(z.object({ page: z.coerce.number() }))
+  .cache({ maxAge: 30, key: ({ ctx }) => String(ctx.user.id) })
+  .action(async ({ input, ctx }) => db.orders.page(ctx.user.id, input.page))
+```
+
+A cached action needs an input schema, so call `.schema()` before `.action()`, with `z.object({}).optional()` for an action without input. A GET sends its input as query strings, hence `z.coerce.number()`.
+
+Built-in middleware such as `rateLimitMiddleware()` adds no typed context, so it can be added at any point of the chain without losing the context collected so far.
+
 ### `.action(handler)` (without schema)
 
 Terminal method. Creates an H3 event handler from the accumulated configuration. When called on an `ActionClient` (no `.schema()` was used), the handler input is `unknown`.
@@ -143,7 +171,7 @@ export default createActionClient()
 
 ## ActionClientWithSchema Methods
 
-After calling `.schema()`, the client transitions to `ActionClientWithSchema<TCtx, TInputSchema>`. This interface exposes three methods.
+After calling `.schema()`, the client transitions to `ActionClientWithSchema<TCtx, TInputSchema>`. This interface exposes these methods.
 
 ```ts
 interface ActionClientWithSchema<TCtx, TInputSchema extends StandardSchemaV1> {
@@ -152,6 +180,10 @@ interface ActionClientWithSchema<TCtx, TInputSchema extends StandardSchemaV1> {
   ) => ActionClientWithSchema<TCtx, TInputSchema>
 
   metadata: (meta: ActionMetadata) => ActionClientWithSchema<TCtx, TInputSchema>
+
+  idempotency: (config?: IdempotencyConfig) => ActionClientWithSchema<TCtx, TInputSchema>
+
+  cache: (config: ActionCacheConfig<InferOutput<TInputSchema>, TCtx>) => ActionClientWithSchema<TCtx, TInputSchema>
 
   action: <TOutput>(
     handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>,

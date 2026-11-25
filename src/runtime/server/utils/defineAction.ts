@@ -1,16 +1,20 @@
-import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from 'h3'
-import type { H3Event, MultiPartData } from 'h3'
+import { defineEventHandler, getHeader, getQuery, readBody, readMultipartFormData, getRequestMethod, getRequestPath } from '../internal/server-runtime'
+import type { ServerEvent, MultiPartData } from '../internal/server-runtime'
 import type {
-  StandardSchemaV1,
-  InferOutput,
-  ActionMiddleware,
-  ActionHandler,
+  ActionCacheConfig,
   ActionError,
+  ActionHandler,
   ActionMetadata,
+  ActionMiddleware,
   ActionResult,
   IdempotencyConfig,
+  InferOutput,
+  StandardSchemaV1,
 } from '../../types'
+import { actionPathOf, assertCacheConfig, runCached } from '../internal/actionCache'
 import { executeWithIdempotency } from './idempotency'
+
+const CACHEABLE_METHODS = new Set(['GET', 'HEAD'])
 
 interface DefineActionOptions<
   TInputSchema extends StandardSchemaV1,
@@ -32,6 +36,12 @@ interface DefineActionOptions<
    * handler. See IdempotencyConfig for TTL, custom keys, and storage.
    */
   idempotency?: IdempotencyConfig
+  /**
+   * Cache successful results of GET and HEAD requests on the server. Input
+   * validation and middleware still run on every request; a hit skips the
+   * handler. See ActionCacheConfig, setActionCacheStore, and invalidateActionCache.
+   */
+  cache?: ActionCacheConfig<InferOutput<TInputSchema>, TCtx>
   /** Custom server error handler */
   handleServerError?: (error: Error) => { code: string, message: string, statusCode?: number }
   /** The action handler function */
@@ -72,19 +82,30 @@ export function defineAction<
 >(options: DefineActionOptions<TInputSchema, TOutput, TCtx, TOutputSchema>) {
   type TInput = TInputSchema extends StandardSchemaV1<infer I, unknown> ? I : unknown
 
-  async function _execute(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
+  if (options.cache) {
+    assertCacheConfig(options.cache, Boolean(options.input))
+  }
+
+  async function _execute(rawInput: unknown, event: ServerEvent, route?: { path: string }): Promise<ActionResult<TOutput>> {
+    const cachePath = options.cache && route && CACHEABLE_METHODS.has(getRequestMethod(event).toUpperCase())
+      ? actionPathOf(route.path)
+      : undefined
     if (options.idempotency) {
       return executeWithIdempotency(
         event,
         rawInput,
         options.idempotency,
-        () => _run(rawInput, event),
+        () => run(rawInput, event, cachePath),
       ) as Promise<ActionResult<TOutput>>
     }
-    return _run(rawInput, event)
+    return run(rawInput, event, cachePath)
   }
 
-  async function _run(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
+  function _run(rawInput: unknown, event: ServerEvent): Promise<ActionResult<TOutput>> {
+    return run(rawInput, event)
+  }
+
+  async function run(rawInput: unknown, event: ServerEvent, cachePath?: string): Promise<ActionResult<TOutput>> {
     try {
       // 1. Validate input with Standard Schema
       let input = rawInput
@@ -118,31 +139,12 @@ export function defineAction<
         ctx = await runMiddleware(event, options.middleware, options.metadata ?? {}) as TCtx
       }
 
-      // 3. Execute handler — input is validated by Standard Schema at this point
-      const data = await options.handler({
-        input: input as InferOutput<TInputSchema>,
-        event,
-        ctx,
-      })
-
-      // 4. Validate output if outputSchema is provided
-      if (options.outputSchema) {
-        const outputResult = await options.outputSchema['~standard'].validate(data)
-        if (outputResult.issues) {
-          return {
-            success: false,
-            error: {
-              code: 'OUTPUT_VALIDATION_ERROR',
-              message: 'Output validation failed',
-              fieldErrors: formatStandardIssues(outputResult.issues),
-              statusCode: 500,
-            } satisfies ActionError,
-          }
-        }
-        return { success: true, data: outputResult.value as TOutput }
+      // 3. Serve from the cache, or execute the handler and validate its output
+      const validInput = input as InferOutput<TInputSchema>
+      if (cachePath !== undefined && options.cache) {
+        return await runCached(cachePath, options.cache, { input: validInput, ctx, event }, () => produce(validInput, ctx, event))
       }
-
-      return { success: true, data }
+      return await produce(validInput, ctx, event)
     }
     catch (error: unknown) {
       // Handle known action errors
@@ -197,10 +199,31 @@ export function defineAction<
     }
   }
 
-  const handler = defineEventHandler(async (event: H3Event) => {
+  async function produce(input: InferOutput<TInputSchema>, ctx: TCtx, event: ServerEvent): Promise<ActionResult<TOutput>> {
+    const data = await options.handler({ input, event, ctx })
+    if (!options.outputSchema) {
+      return { success: true, data }
+    }
+
+    const outputResult = await options.outputSchema['~standard'].validate(data)
+    if (outputResult.issues) {
+      return {
+        success: false,
+        error: {
+          code: 'OUTPUT_VALIDATION_ERROR',
+          message: 'Output validation failed',
+          fieldErrors: formatStandardIssues(outputResult.issues),
+          statusCode: 500,
+        } satisfies ActionError,
+      }
+    }
+    return { success: true, data: outputResult.value as TOutput }
+  }
+
+  const handler = defineEventHandler(async (event: ServerEvent) => {
     let rawInput: unknown
     try {
-      rawInput = await parseInput(event)
+      rawInput = await parseActionInput(event)
     }
     catch (parseError: unknown) {
       if (isActionError(parseError)) {
@@ -208,12 +231,13 @@ export function defineAction<
       }
       throw parseError
     }
-    return _execute(rawInput, event)
+    return _execute(rawInput, event, options.cache ? { path: getRequestPath(event) } : undefined)
   })
 
   // Attach _execute and phantom _types for virtual module generation
   return Object.assign(handler, {
     _execute,
+    _run,
     _input: options.input,
     _outputSchema: options.outputSchema,
     _types: {} as {
@@ -231,14 +255,16 @@ export function createActionError(opts: {
   message: string
   statusCode?: number
   fieldErrors?: Record<string, string[]>
+  retryAfter?: number
 }): ActionError {
-  const error = {
+  const error: ActionError = {
     code: opts.code,
     message: opts.message,
     statusCode: opts.statusCode ?? 400,
     fieldErrors: opts.fieldErrors,
-    __isActionError: true,
   }
+  if (opts.retryAfter !== undefined) error.retryAfter = opts.retryAfter
+  Object.defineProperty(error, '__isActionError', { value: true, enumerable: false })
   return error as ActionError & { __isActionError: true }
 }
 
@@ -262,8 +288,8 @@ export function foldMultipartData(parts: MultiPartData[]): Record<string, unknow
   return out
 }
 
-async function parseInput(event: H3Event): Promise<unknown> {
-  const method = event.method.toUpperCase()
+export async function parseActionInput(event: ServerEvent): Promise<unknown> {
+  const method = getRequestMethod(event).toUpperCase()
 
   if (method === 'GET' || method === 'HEAD') {
     return getQuery(event)
@@ -374,7 +400,7 @@ function deepMerge(
 }
 
 export async function runMiddleware(
-  event: H3Event,
+  event: ServerEvent,
   middlewares: ActionMiddleware[],
   metadata: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {

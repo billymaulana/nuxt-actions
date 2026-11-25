@@ -1,3 +1,7 @@
+---
+description: "API reference for useStreamActionQuery: cached stream results that are restored instantly when a component mounts again."
+---
+
 # useStreamActionQuery()
 
 Composable that wraps `useStreamAction` with caching support. When a stream completes, the accumulated chunks are cached in `nuxtApp.payload.data`. On remount, cached chunks are restored immediately.

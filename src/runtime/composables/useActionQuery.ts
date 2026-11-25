@@ -46,18 +46,18 @@ import { registerTags } from './_tagRegistry'
  */
 
 // Overload 1: typed reference (full inference)
-export function useActionQuery<T extends TypedActionReference>(
+export function useActionQuery<T extends TypedActionReference, TData = InferActionOutput<T>>(
   action: T,
   input?: MaybeRefOrGetter<InferActionInput<T>>,
-  options?: UseActionQueryOptions<InferActionOutput<T>>,
-): UseActionQueryReturn<InferActionOutput<T>>
+  options?: UseActionQueryOptions<InferActionOutput<T>, TData>,
+): UseActionQueryReturn<TData>
 
 // Overload 2: string path (manual generics)
-export function useActionQuery<TInput = void, TOutput = unknown>(
+export function useActionQuery<TInput = void, TOutput = unknown, TData = TOutput>(
   path: string,
   input?: MaybeRefOrGetter<TInput>,
-  options?: UseActionQueryOptions<TOutput>,
-): UseActionQueryReturn<TOutput>
+  options?: UseActionQueryOptions<TOutput, TData>,
+): UseActionQueryReturn<TData>
 
 // Implementation
 export function useActionQuery(

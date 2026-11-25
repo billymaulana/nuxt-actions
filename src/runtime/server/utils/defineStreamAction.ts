@@ -1,13 +1,13 @@
-import { defineEventHandler, readBody, getQuery, createEventStream } from 'h3'
-import type { H3Event, EventStream } from 'h3'
+import type { EventStream, ServerEvent } from '../internal/server-runtime'
+import { createEventStream, defineEventHandler, getQuery, readBody, getRequestMethod } from '../internal/server-runtime'
 import type {
-  StandardSchemaV1,
-  InferOutput,
-  ActionMiddleware,
-  ActionMetadata,
   ActionError,
+  ActionMetadata,
+  ActionMiddleware,
+  InferOutput,
+  StandardSchemaV1,
 } from '../../types'
-import { formatStandardIssues, runMiddleware, isActionError } from './defineAction'
+import { formatStandardIssues, isActionError, runMiddleware } from './defineAction'
 
 interface StreamActionSender<TChunk = unknown> {
   /** Send a data chunk to the client (no-op once the stream is closed). */
@@ -37,7 +37,7 @@ interface DefineStreamActionOptions<
   /** The streaming handler function */
   handler: (params: {
     input: InferOutput<TInputSchema>
-    event: H3Event
+    event: ServerEvent
     ctx: TCtx
     stream: StreamActionSender<TChunk>
   }) => Promise<void>
@@ -67,10 +67,10 @@ export function defineStreamAction<
 >(options: DefineStreamActionOptions<TInputSchema, TChunk, TCtx>) {
   type TInput = TInputSchema extends StandardSchemaV1<infer I, unknown> ? I : unknown
 
-  const handler = defineEventHandler(async (event: H3Event) => {
+  const handler = defineEventHandler(async (event: ServerEvent) => {
     try {
       // 1. Parse input
-      const method = event.method.toUpperCase()
+      const method = getRequestMethod(event).toUpperCase()
       let rawInput: unknown
       if (method === 'GET' || method === 'HEAD') {
         rawInput = getQuery(event)
@@ -90,17 +90,12 @@ export function defineStreamAction<
 
         const result = await options.input['~standard'].validate(rawInput)
         if (result.issues) {
-          const error: ActionError = {
+          return respondWithStreamError(event, {
             code: 'VALIDATION_ERROR',
             message: 'Input validation failed',
             fieldErrors: formatStandardIssues(result.issues),
             statusCode: 422,
-          }
-          // For streams, send error as SSE and close
-          const errorStream = createEventStream(event)
-          await errorStream.push(JSON.stringify({ __actions_error: error }))
-          await errorStream.close()
-          return errorStream.send()
+          })
         }
         input = result.value
       }
@@ -198,26 +193,18 @@ export function defineStreamAction<
 
       // Preserve ActionError from middleware (createActionError)
       if (isActionError(error)) {
-        const errorStream = createEventStream(event)
-        await errorStream.push(JSON.stringify({ __actions_error: error }))
-        await errorStream.close()
-        return errorStream.send()
+        return respondWithStreamError(event, error)
       }
 
       const actionError = error instanceof Error && options.handleServerError
         ? options.handleServerError(error)
         : { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred', statusCode: 500 }
 
-      const errorStream = createEventStream(event)
-      await errorStream.push(JSON.stringify({
-        __actions_error: {
-          code: actionError.code,
-          message: actionError.message,
-          statusCode: actionError.statusCode ?? 500,
-        },
-      }))
-      await errorStream.close()
-      return errorStream.send()
+      return respondWithStreamError(event, {
+        code: actionError.code,
+        message: actionError.message,
+        statusCode: actionError.statusCode ?? 500,
+      })
     }
   })
 
@@ -229,4 +216,18 @@ export function defineStreamAction<
     },
     _isStream: true as const,
   })
+}
+
+/** h3 only completes an event stream write once it is being read, so the stream is sent before pushing. */
+async function respondWithStreamError(event: ServerEvent, error: ActionError) {
+  const errorStream = createEventStream(event)
+  const response = errorStream.send()
+  try {
+    await errorStream.push(JSON.stringify({ __actions_error: error }))
+    await errorStream.close()
+  }
+  catch {
+    // The client may have disconnected before the error frame was written.
+  }
+  return response
 }

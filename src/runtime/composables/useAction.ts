@@ -10,8 +10,10 @@ import type {
   TypedActionReference,
   InferActionInput,
   InferActionOutput,
+  UploadProgress,
 } from '../types'
-import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, abortResult, raceAbort } from './_utils'
+import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, abortResult, raceAbort, runWithRetryAfter } from './_utils'
+import { canTrackUploads, createProgressFetch } from './_xhrFetch'
 
 /**
  * Composable to call a server action with reactive state management.
@@ -67,6 +69,8 @@ export function useAction(
   const data = ref<unknown>(null)
   const error = ref<ActionError | null>(null)
   const status = ref<ActionStatus>('idle')
+  const uploadProgress = ref<UploadProgress | null>(null)
+  const tracksUploads = Boolean(options.uploadProgress || options.onUploadProgress)
 
   const isIdle = computed(() => status.value === 'idle')
   const isExecuting = computed(() => status.value === 'executing')
@@ -113,6 +117,19 @@ export function useAction(
     }
   }
 
+  function fetcherFor(isLatest: () => boolean): typeof $fetch {
+    if (!tracksUploads || !canTrackUploads() || typeof appFetch.create !== 'function') return appFetch
+    uploadProgress.value = { loaded: 0, total: null, percent: null }
+    // Nitro types create() with one argument; ofetch also takes the fetch to use as a second one.
+    const withFetch = appFetch as unknown as { create: (defaults: object, globals: { fetch: typeof fetch }) => typeof $fetch }
+    return withFetch.create({}, {
+      fetch: createProgressFetch((progress) => {
+        if (isLatest()) uploadProgress.value = progress
+        options.onUploadProgress?.(progress)
+      }),
+    })
+  }
+
   async function _doExecute(
     input: unknown,
     controller: AbortController,
@@ -149,7 +166,12 @@ export function useAction(
       retry: options.retry,
       signal: controller.signal,
     })
-    const fetchPromise = appFetch<ActionResult<unknown>>(path, fetchOptions)
+    const requestFetch = fetcherFor(isLatest)
+    const fetchPromise = runWithRetryAfter(
+      () => requestFetch<ActionResult<unknown>>(path, fetchOptions),
+      options.retry,
+      controller.signal,
+    )
 
     try {
       /*
@@ -258,6 +280,7 @@ export function useAction(
     data.value = null
     error.value = null
     status.value = 'idle'
+    uploadProgress.value = null
   }
 
   // Wrap execute with debounce or throttle if configured (debounce takes priority)
@@ -308,5 +331,6 @@ export function useAction(
     hasErrored,
     cancel,
     reset,
+    uploadProgress: readonly(uploadProgress) as Readonly<Ref<UploadProgress | null>>,
   }
 }

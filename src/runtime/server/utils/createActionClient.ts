@@ -9,6 +9,7 @@ import type {
   ActionClientWithSchema,
   BuiltAction,
   IdempotencyConfig,
+  ActionCacheConfig,
 } from '../../types'
 import { defineAction } from './defineAction'
 
@@ -58,20 +59,19 @@ interface BuilderConfig {
   inputSchema?: StandardSchemaV1
   outputSchema?: StandardSchemaV1
   idempotency?: IdempotencyConfig
+  cache?: ActionCacheConfig
   handleServerError?: ServerErrorHandler
 }
 
 function buildClient<TCtx>(config: BuilderConfig): ActionClient<TCtx> {
+  // Middleware is typed at the public API boundary; internal storage uses the base type
+  const use = (middleware: ActionMiddleware) => buildClient({
+    ...config,
+    middleware: [...config.middleware, middleware],
+  })
+
   return {
-    use<TNewCtx extends Record<string, unknown>>(
-      middleware: ActionMiddleware<TCtx, TNewCtx>,
-    ): ActionClient<TCtx & TNewCtx> {
-      // Middleware is typed at the public API boundary; internal storage uses the base type
-      return buildClient<TCtx & TNewCtx>({
-        ...config,
-        middleware: [...config.middleware, middleware as ActionMiddleware<Record<string, unknown>, Record<string, unknown>>],
-      })
-    },
+    use: use as unknown as ActionClient<TCtx>['use'],
 
     schema<TInputSchema extends StandardSchemaV1>(
       inputSchema: TInputSchema,
@@ -96,6 +96,13 @@ function buildClient<TCtx>(config: BuilderConfig): ActionClient<TCtx> {
       })
     },
 
+    cache(cacheConfig: ActionCacheConfig<unknown, TCtx>): ActionClient<TCtx> {
+      return buildClient<TCtx>({
+        ...config,
+        cache: cacheConfig as ActionCacheConfig,
+      })
+    },
+
     action<TOutput>(
       handler: ActionHandler<unknown, TOutput, TCtx>,
     ) {
@@ -103,6 +110,7 @@ function buildClient<TCtx>(config: BuilderConfig): ActionClient<TCtx> {
         middleware: config.middleware,
         metadata: config.metadata,
         idempotency: config.idempotency,
+        cache: config.cache,
         handleServerError: config.handleServerError,
         handler: handler as ActionHandler<unknown, TOutput, Record<string, unknown>>,
       })
@@ -137,6 +145,13 @@ function buildClientWithSchema<TCtx, TInputSchema extends StandardSchemaV1>(
       })
     },
 
+    cache(cacheConfig: ActionCacheConfig<InferOutput<TInputSchema>, TCtx>): ActionClientWithSchema<TCtx, TInputSchema> {
+      return buildClientWithSchema<TCtx, TInputSchema>({
+        ...config,
+        cache: cacheConfig as ActionCacheConfig,
+      })
+    },
+
     action<TOutput>(
       handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>,
     ) {
@@ -150,6 +165,7 @@ function buildClientWithSchema<TCtx, TInputSchema extends StandardSchemaV1>(
         middleware: config.middleware,
         metadata: config.metadata,
         idempotency: config.idempotency,
+        cache: config.cache,
         handleServerError: config.handleServerError,
         handler: handler as ActionHandler<InferOutput<TInputSchema>, TOutput, Record<string, unknown>>,
       }) as unknown as BuiltAction<InferInput<TInputSchema>, TOutput>

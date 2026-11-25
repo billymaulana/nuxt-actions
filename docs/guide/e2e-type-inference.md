@@ -1,3 +1,7 @@
+---
+description: "Import typed action references from #actions so the client knows each action's input and output types, with no manual generics."
+---
+
 # E2E Type Inference
 
 ::: tip New in v0.3.0
@@ -83,6 +87,28 @@ const { execute, data, isExecuting, hasSucceeded } = useAction(createTodo, {
   <p v-if="hasSucceeded">Created: {{ data?.title }}</p>
 </template>
 ```
+
+### Input and Output Types
+
+`execute()` takes the schema's input type and the handler receives its output type, so a `transform` is typed correctly on both sides:
+
+```ts
+input: z.object({
+  mobile: z.string().regex(/^\d{10}$/).transform(Number),
+}),
+```
+
+Here `execute()` expects `{ mobile: string }` and the handler receives `{ mobile: number }`.
+
+A coercing schema accepts any value, so its input type is `unknown` and `execute()` stops checking that field. Pass the input type as a type argument to keep the check:
+
+```ts
+input: z.object({
+  mobile: z.coerce.string<string>().regex(/^\d{10}$/).transform(Number),
+}),
+```
+
+The same rule applies to every Standard Schema library: the client sees the input type the schema reports.
 
 ## HTTP Method Convention
 

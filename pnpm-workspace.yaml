@@ -1,2 +1,15 @@
 packages:
   - playground
+  - example
+
+linkWorkspacePackages: true
+
+shamefullyHoist: true
+
+overrides:
+  readdir-glob>minimatch: ^11.0.1
+  vitepress>vite: ^6.4.2
+
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true

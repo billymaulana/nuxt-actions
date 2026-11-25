@@ -1,3 +1,7 @@
+---
+description: "API reference for useFormAction: reactive form fields, field errors, dirty tracking, and reset on top of useAction."
+---
+
 # useFormAction()
 
 A Vue composable that wraps `useAction` with form-specific features: reactive fields for `v-model`, field-level validation error extraction, dirty tracking, and reset.

@@ -1,3 +1,7 @@
+---
+description: "API reference for useStreamAction: consume streaming actions with reactive chunks, status, errors, and stop."
+---
+
 # useStreamAction()
 
 Client composable for consuming streaming server actions via Server-Sent Events. Provides reactive state for stream chunks, status, and error handling.

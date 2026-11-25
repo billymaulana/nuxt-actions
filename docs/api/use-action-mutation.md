@@ -1,3 +1,7 @@
+---
+description: "API reference for useActionMutation: run a write action and refetch the queries it affects, by typed reference or by string tag."
+---
+
 # useActionMutation()
 
 Run a write action and, on success, automatically refetch the `useActionQuery` caches it affects. Targets are typed action references (type-safe) or string tags (for grouping across actions).

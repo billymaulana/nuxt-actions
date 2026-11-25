@@ -1,9 +1,13 @@
+---
+description: "Handle every failure the same way: validation, middleware, handler, and network errors share one ActionError shape with codes and field errors."
+---
+
 # Error Handling
 
 Every error in `nuxt-actions` follows a single, predictable structure -- whether it comes from input validation, middleware, your handler, or a network failure. This consistency means your client code can handle all errors the same way, and you never need to guess at the shape of an error response.
 
 ::: tip Working example
-See error handling patterns in the [example /errors page](https://github.com/billymaulana/nuxt-actions-example/blob/master/pages/errors.vue) -- includes custom error codes, field-level errors, and error recovery.
+See error handling patterns in the [Form Actions](/examples/forms) and [Resilience](/examples/resilience) examples -- field-level errors, custom error codes, and retries.
 :::
 
 ## The ActionError Structure

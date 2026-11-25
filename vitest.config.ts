@@ -1,7 +1,9 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    include: ['test/unit/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/runtime/**/*.ts'],
@@ -13,6 +15,11 @@ export default defineConfig({
         functions: 100,
         lines: 100,
       },
+    },
+  },
+  resolve: {
+    alias: {
+      '#nuxt-actions/server-runtime': resolve('./src/runtime/server/internal/nitro2.ts'),
     },
   },
 })

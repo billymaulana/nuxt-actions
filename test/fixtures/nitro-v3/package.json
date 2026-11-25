@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "nitro-v3",
+  "type": "module",
+  "dependencies": {
+    "nitro": "*"
+  }
+}

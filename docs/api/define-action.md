@@ -1,3 +1,7 @@
+---
+description: "API reference for defineAction: every option, the handler parameters, the result format, and how errors are returned to the client."
+---
+
 # defineAction()
 
 Create a type-safe server action with Standard Schema validation, middleware, and structured error handling. Returns an H3 event handler that can be used as a Nuxt API route.
@@ -40,6 +44,8 @@ interface DefineActionOptions<TInputSchema, TOutput, TCtx, TOutputSchema> {
   outputSchema?: TOutputSchema
   middleware?: ActionMiddleware[]
   metadata?: ActionMetadata
+  idempotency?: IdempotencyConfig
+  cache?: ActionCacheConfig<InferOutput<TInputSchema>, TCtx>
   handleServerError?: (error: Error) => { code: string, message: string, statusCode?: number }
   handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>
 }
@@ -128,6 +134,27 @@ export default defineAction({
 })
 ```
 
+### `idempotency`
+
+- **Type:** `IdempotencyConfig`
+- **Required:** No
+- **Description:** Replay protection keyed by the `Idempotency-Key` header. See [Idempotency](/api/idempotency).
+
+### `cache`
+
+- **Type:** `ActionCacheConfig`
+- **Required:** No
+- **Description:** Cache successful results of `GET` and `HEAD` requests on the server. Input validation and middleware still run on every request; a hit skips the handler and output validation. The action needs an `input` schema, `z.object({}).optional()` when it takes none, and `defineAction` throws without one. In `server/actions/` the entry is keyed by the action path, and for a route in `server/api/` by the request path. See [Caching](/guide/caching).
+
+```ts
+// server/actions/products/list.get.ts
+export default defineAction({
+  input: z.object({ category: z.string() }),
+  cache: { maxAge: 60 },
+  handler: async ({ input }) => db.products.findMany({ where: { category: input.category } }),
+})
+```
+
 ### `handleServerError`
 
 - **Type:** `(error: Error) => { code: string, message: string, statusCode?: number }`
@@ -164,7 +191,7 @@ export default defineAction({
 ```ts
 type ActionHandler<TInput, TOutput, TCtx> = (params: {
   input: TInput
-  event: H3Event
+  event: ServerEvent
   ctx: TCtx
 }) => TOutput | Promise<TOutput>
 ```
@@ -180,8 +207,8 @@ type ActionHandler<TInput, TOutput, TCtx> = (params: {
 
 ### `event`
 
-- **Type:** `H3Event` (from the `h3` package)
-- **Description:** The raw H3 event object. Provides access to headers, cookies, request metadata, and all H3 utilities (`getHeader`, `setCookie`, `getRequestIP`, etc.).
+- **Type:** `ServerEvent` (exported from `nuxt-actions/types`)
+- **Description:** The request event of the server runtime: h3's `H3Event` on Nitro v2, the portable `RequestEvent` on Nitro v3. Use it for headers, cookies, IP, and other request metadata. See [Server Runtimes](/guide/server-runtimes) for helpers that work on both.
 
 ### `ctx`
 
@@ -194,10 +221,11 @@ type ActionHandler<TInput, TOutput, TCtx> = (params: {
 
 1. **Parse input** -- For `GET`/`HEAD`, reads query parameters via `getQuery(event)`. For other methods, reads the JSON body via `readBody(event)`. Malformed JSON on a `content-type: application/json` request throws `PARSE_ERROR` (`statusCode: 400`).
 2. **Validate input** -- If `input` schema is provided, validates the parsed input against the Standard Schema `~standard.validate()` method. Failures return `VALIDATION_ERROR` (`statusCode: 422`) with `fieldErrors`.
-3. **Run middleware** -- Executes each middleware in array order. Each middleware should call `next()` exactly once. Context passed via `next({ ctx: { ... } })` is **deep-merged** into the existing context (nested objects are recursively merged, arrays are replaced). If a middleware does not call `next()`, a warning is logged in development to help detect accidental omissions.
-4. **Execute handler** -- Calls the handler with `{ input, event, ctx }`.
-5. **Validate output** -- If `outputSchema` is provided, validates the handler return value. Failures return `OUTPUT_VALIDATION_ERROR` (`statusCode: 500`).
-6. **Return result** -- On success, returns `{ success: true, data: TOutput }`.
+3. **Run middleware** -- Executes each middleware in array order. Each middleware should call `next()` exactly once. Context passed via `next({ ctx: { ... } })` is **deep-merged** into the existing context (nested objects are recursively merged, arrays are replaced). If a middleware returns without calling `next()`, the remaining middleware is skipped and the handler still runs. Throw an `ActionError` from middleware to stop the request.
+4. **Check the cache** -- With `cache`, a `GET` or `HEAD` request for a stored result returns it here and skips the next two steps. See [Caching](/guide/caching).
+5. **Execute handler** -- Calls the handler with `{ input, event, ctx }`.
+6. **Validate output** -- If `outputSchema` is provided, validates the handler return value. Failures return `OUTPUT_VALIDATION_ERROR` (`statusCode: 500`).
+7. **Return result** -- On success, returns `{ success: true, data: TOutput }`.
 
 ---
 

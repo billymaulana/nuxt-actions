@@ -1,3 +1,7 @@
+---
+description: "API reference for the idempotency option: keys, scopes, TTL, required keys, error codes, and pluggable IdempotencyStore implementations."
+---
+
 # Idempotency
 
 Replay protection for actions, keyed by the `Idempotency-Key` request header. Configured via the `idempotency` option on [`defineAction`](/api/define-action) or the `.idempotency()` builder step on [`createActionClient`](/api/create-action-client).
@@ -11,8 +15,8 @@ interface IdempotencyConfig {
   ttl?: number
   header?: string
   required?: boolean
-  key?: (event: H3Event) => string | null | undefined | Promise<string | null | undefined>
-  scope?: (event: H3Event) => string | Promise<string>
+  key?: (event: ServerEvent) => string | null | undefined | Promise<string | null | undefined>
+  scope?: (event: ServerEvent) => string | Promise<string>
   store?: IdempotencyStore
 }
 ```

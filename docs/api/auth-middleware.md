@@ -1,3 +1,7 @@
+---
+description: "API reference for defineAuthMiddleware: resolve the current user into ctx.user or reject with a 401, with optional auth and a custom message."
+---
+
 # defineAuthMiddleware()
 
 Auth middleware preset for `createActionClient`. Resolves the current user into `ctx.user`, or rejects with a `401` when no user is found.
@@ -6,7 +10,7 @@ Auth middleware preset for `createActionClient`. Resolves the current user into 
 
 ```ts
 function defineAuthMiddleware<TUser>(
-  resolve: (event: H3Event) => TUser | null | undefined | Promise<TUser | null | undefined>,
+  resolve: (event: ServerEvent) => TUser | null | undefined | Promise<TUser | null | undefined>,
   opts?: AuthMiddlewareOptions,
 ): ActionMiddleware
 ```
@@ -15,7 +19,7 @@ function defineAuthMiddleware<TUser>(
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `resolve` | `(event: H3Event) => TUser \| null \| undefined \| Promise<...>` | Yes | Resolves the current user from the request. Return `null`/`undefined` for anonymous. |
+| `resolve` | `(event: ServerEvent) => TUser \| null \| undefined \| Promise<...>` | Yes | Resolves the current user from the request. Return `null`/`undefined` for anonymous. |
 | `opts` | `AuthMiddlewareOptions` | No | See below. |
 
 ### AuthMiddlewareOptions
@@ -58,6 +62,8 @@ export default createActionClient()
   }))
   .action(async ({ ctx }) => ({ user: ctx.user }))
 ```
+
+On Nitro v3, read the header with `getRequestHeader(event, 'x-user-id')` from `nuxt/server` instead. See [Server Runtimes](/guide/server-runtimes).
 
 ### Optional auth
 

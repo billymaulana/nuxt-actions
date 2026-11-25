@@ -151,6 +151,15 @@ describe('UseOptimisticActionReturn types', () => {
     type Return = UseOptimisticActionReturn<{ id: number }, { count: number }>
     expectTypeOf<Parameters<Return['execute']>[0]>().toEqualTypeOf<{ id: number }>()
   })
+
+  it('reconcile receives the action output and returns the optimistic state type', () => {
+    type Options = UseOptimisticActionOptions<{ id: number }, { id: number, done: boolean }, Array<{ id: number, done: boolean, title: string }>>
+    expectTypeOf<Parameters<NonNullable<Options['reconcile']>>>().toEqualTypeOf<[
+      { id: number, done: boolean },
+      Array<{ id: number, done: boolean, title: string }>,
+    ]>()
+    expectTypeOf<ReturnType<NonNullable<Options['reconcile']>>>().toEqualTypeOf<Array<{ id: number, done: boolean, title: string }>>()
+  })
 })
 
 describe('UseFormActionReturn types', () => {
@@ -196,5 +205,43 @@ describe('Debounce/Throttle options', () => {
     type Opts = UseOptimisticActionOptions<unknown, unknown>
     expectTypeOf<Opts['debounce']>().toEqualTypeOf<number | undefined>()
     expectTypeOf<Opts['throttle']>().toEqualTypeOf<number | undefined>()
+  })
+})
+
+describe('Actions without input', () => {
+  it('execute and executeAsync can be called without an argument', () => {
+    type Return = UseActionReturn<unknown, { issued: boolean }>
+    expectTypeOf<Return['execute']>().toBeCallableWith()
+    expectTypeOf<Return['executeAsync']>().toBeCallableWith()
+  })
+
+  it('execute still requires the input when the action declares one', () => {
+    type Return = UseActionReturn<{ title: string }, { id: number }>
+    // @ts-expect-error the input is required
+    expectTypeOf<Return['execute']>().toBeCallableWith()
+  })
+})
+
+declare const useActionQueryForTypes: typeof import('../../src/runtime/composables/useActionQuery').useActionQuery
+
+describe('useActionQuery transform', () => {
+  it('lets transform change the data type', () => {
+    type Todo = { id: number, title: string }
+    const check = (listTodos: TypedActionReference<void, Todo[]>) => {
+      const { data } = useActionQueryForTypes(listTodos, undefined, {
+        transform: todos => todos.map((todo, index) => ({ ...todo, index })),
+      })
+      expectTypeOf(data.value).toEqualTypeOf<Array<{ id: number, title: string, index: number }> | null>()
+    }
+    expectTypeOf(check).toBeFunction()
+  })
+
+  it('keeps the action output type without transform', () => {
+    type Todo = { id: number, title: string }
+    const check = (listTodos: TypedActionReference<void, Todo[]>) => {
+      const { data } = useActionQueryForTypes(listTodos)
+      expectTypeOf(data.value).toEqualTypeOf<Todo[] | null>()
+    }
+    expectTypeOf(check).toBeFunction()
   })
 })

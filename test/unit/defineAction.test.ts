@@ -625,6 +625,11 @@ describe('createActionError', () => {
     expect(error.statusCode).toBe(400)
   })
 
+  it('keeps the marker out of the serialized error', () => {
+    const error = createActionError({ code: 'FORBIDDEN', message: 'No access', statusCode: 403 })
+    expect(JSON.parse(JSON.stringify(error))).toEqual({ code: 'FORBIDDEN', message: 'No access', statusCode: 403 })
+  })
+
   it('has __isActionError marker', () => {
     const error = createActionError({ code: 'X', message: 'x' })
     expect((error as unknown as Record<string, unknown>).__isActionError).toBe(true)

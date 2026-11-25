@@ -1,9 +1,13 @@
+---
+description: "Compose actions with createActionClient: share middleware, input schemas, and metadata across actions with a typed, immutable builder."
+---
+
 # Builder Pattern
 
 `createActionClient` provides a fluent builder API for composing actions with shared middleware, schemas, and metadata. Instead of repeating the same middleware array in every `defineAction` call, you define reusable clients that encode your application's common patterns once.
 
 ::: tip Working example
-See the builder pattern in a real application: [example /builder page](https://github.com/billymaulana/nuxt-actions-example/blob/master/pages/builder.vue) with shared middleware chains.
+See the builder pattern in a real application: the [Auth Preset example](/examples/auth) builds an action with `createActionClient` and `defineAuthMiddleware`.
 :::
 
 ## Why Use `createActionClient`?

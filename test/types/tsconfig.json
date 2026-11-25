@@ -9,6 +9,9 @@
     "paths": {
       "#app": [
         "../../node_modules/nuxt/dist/app"
+      ],
+      "#nuxt-actions/server-runtime": [
+        "../../src/runtime/server/internal/nitro2"
       ]
     }
   },

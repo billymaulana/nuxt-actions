@@ -1,10 +1,29 @@
+---
+description: "Secure server actions in production: CSRF tokens, authentication, input validation, rate limiting, error sanitization, and safe action file scanning."
+---
+
 # Security
 
 Best practices for securing your server actions in production.
 
 ## CSRF Protection
 
-nuxt-actions provides a built-in `csrfMiddleware()` for CSRF token protection on mutation actions:
+nuxt-actions has two middleware against cross-site request forgery. `originMiddleware()` rejects mutations that come from another site, from the `Sec-Fetch-Site` and `Origin` headers browsers send, so client code needs no changes:
+
+```ts
+const protectedAction = createActionClient()
+  .use(originMiddleware())
+  .schema(z.object({ title: z.string() }))
+  .action(async ({ input }) => {
+    return db.createPost(input)
+  })
+```
+
+See the [originMiddleware API reference](/api/origin-middleware) for the exact rules and for `allowedOrigins`.
+
+Both middleware check the request's own method. A mutation run with [callAction](/api/call-action) from a GET route is not checked, so expose mutations only through POST, PUT, PATCH, or DELETE routes.
+
+`csrfMiddleware()` uses a token instead, with the double-submit cookie pattern:
 
 ```ts
 const protectedAction = createActionClient()
@@ -25,7 +44,7 @@ csrfMiddleware({
 })
 ```
 
-On safe requests (GET, HEAD), a token is set as an httpOnly cookie. On mutation requests (POST, PUT, PATCH, DELETE), the middleware validates that the token in the request header matches the cookie value.
+On safe requests (GET, HEAD, OPTIONS), the middleware keeps the token already in the cookie or creates one, and sets it as a cookie that client code can read. On mutation requests (POST, PUT, PATCH, DELETE), it validates that the token in the request header matches the cookie value. Handlers receive the token as `ctx.csrfToken`.
 
 See the [csrfMiddleware API reference](/api/csrf-middleware) for full details.
 
@@ -140,6 +159,12 @@ rateLimitMiddleware({
   message: 'Rate limit exceeded. Please try again later.',
 })
 ```
+
+Over the limit, the action fails with `RATE_LIMIT` and `retryAfter`, the seconds until the window ends, and the response carries a `Retry-After` header. `headers: true` adds `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` to every response. On the client, `retry: { respectRetryAfter: true }` waits that long before it retries.
+
+The default key is the first `X-Forwarded-For` entry, which the client controls unless your proxy overwrites it. When the app can be reached without such a proxy, pass a `keyFn` built on an address you trust, or a client can get around the limit by sending a different header each time.
+
+Counts live in the memory of one server process. With several instances, pass a shared `store`, as in [the Redis example](/api/rate-limit-middleware#shared-store-with-redis), and give each limiter its own name in it, or limiters that share the store also share their counts.
 
 See the [rateLimitMiddleware API reference](/api/rate-limit-middleware) for full configuration options.
 

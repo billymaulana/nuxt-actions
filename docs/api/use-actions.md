@@ -1,3 +1,7 @@
+---
+description: "API reference for useActions: execute several actions with their inputs, in parallel or in sequence, and read every result."
+---
+
 # useActions()
 
 Composable for batch / parallel execution of multiple server actions. Runs all actions with corresponding inputs using `Promise.allSettled` (parallel) or sequentially.

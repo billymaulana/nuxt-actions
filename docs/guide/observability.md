@@ -1,3 +1,7 @@
+---
+description: "Observe every action in one place with global hooks for start, success, error, and settled, including timing, for analytics and monitoring."
+---
+
 # Observability
 
 Per-call callbacks (`onSuccess`, `onError`) are great for component logic, but analytics, toasts, and monitoring want **one** place that sees every action. The global hooks fire for every `useAction` and `useOptimisticAction` call in the app.

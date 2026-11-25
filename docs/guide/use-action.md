@@ -1,9 +1,13 @@
+---
+description: "Call server actions from components with useAction: reactive status, data, and errors, plus retries, deduplication, timeouts, and cancellation."
+---
+
 # useAction
 
 `useAction` is the primary client-side composable for calling server actions. It provides reactive state management, lifecycle callbacks, and a consistent interface for any HTTP method. It is auto-imported in all Nuxt components, pages, and composables.
 
 ::: tip Working example
-See `useAction` with CRUD operations in the [example /actions page](https://github.com/billymaulana/nuxt-actions-example/blob/master/pages/actions.vue) -- create, list, toggle, and delete todos.
+See `useAction` with CRUD operations in the [example /actions page](/examples/actions) -- create and list todos.
 :::
 
 ## Basic Usage
@@ -160,10 +164,7 @@ status: Ref<ActionStatus>
 
 Tracks the lifecycle of the action:
 
-```
-idle  -->  executing  -->  success
-                       -->  error
-```
+<FlowSteps :rows="[{ label: 'Success', steps: ['idle', 'executing', 'success'] }, { label: 'Failure', steps: ['idle', 'executing', 'error'] }]" />
 
 - `idle` -- Initial state, or after calling `reset()`
 - `executing` -- A request is in flight
@@ -548,6 +549,20 @@ const { execute } = useAction(syncOrders, {
 ::: warning ofetch version requirement
 `backoff`, `maxDelay`, and `jitter` rely on ofetch >= 1.4 (bundled with Nuxt 3.13+). On older Nuxt 3.x runtimes these options silently fall back to ofetch's own delay handling — plain `delay` works everywhere.
 :::
+
+### Waiting for Retry-After
+
+```ts
+const { execute } = useAction(sendCode, {
+  retry: { count: 2, respectRetryAfter: true },
+})
+```
+
+With `respectRetryAfter`, a `RATE_LIMIT` result from [rateLimitMiddleware](/api/rate-limit-middleware) is retried after the `retryAfter` seconds the server sent, and an HTTP error with a `Retry-After` header after that delay. A wait longer than `maxDelay` (30 seconds by default) is not retried; the call resolves with the error instead. Only use it for actions that are safe to run twice: a handler that throws a `RATE_LIMIT` error after it already did some work runs again on the retry.
+
+## Upload Progress
+
+`uploadProgress: true` tracks how much of a `FormData` body has been sent, in the `uploadProgress` ref. See [File Uploads](/guide/file-uploads#upload-progress).
 
 ## Next Steps
 

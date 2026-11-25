@@ -1,3 +1,7 @@
+---
+description: "Generate an OpenAPI 3.1 document and an optional Swagger UI from your actions and their schemas with one module option."
+---
+
 # OpenAPI & Swagger UI
 
 Enable OpenAPI generation in your module config:

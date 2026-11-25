@@ -1,4 +1,4 @@
-import { ref, onScopeDispose } from 'vue'
+import { ref, nextTick, onScopeDispose } from 'vue'
 import { useOptimisticAction } from '../../src/runtime/composables/useOptimisticAction'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -152,6 +152,369 @@ describe('useOptimisticAction', () => {
 
       // Should be server truth, not optimistic value
       expect(optimisticData.value).toEqual({ count: 5 })
+    })
+
+    it('reconciles a response of a different shape into the optimistic state', async () => {
+      interface Confirmation { id: number, done: boolean, updatedAt: string }
+      const todos = ref<Todo[]>([
+        { id: 1, title: 'Buy milk', done: false },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+      const confirmation = { id: 1, done: true, updatedAt: '2026-11-25T00:00:00.000Z' }
+      mockFetch.mockResolvedValue({ success: true, data: confirmation })
+
+      const { execute, optimisticData, data } = useOptimisticAction<{ id: number, done: boolean }, Confirmation, Todo[]>(
+        '/api/todos/toggle',
+        {
+          currentData: todos,
+          updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: input.done } : t),
+          reconcile: (confirmed, current) => current.map(t => t.id === confirmed.id ? { ...t, done: confirmed.done } : t),
+        },
+      )
+
+      await execute({ id: 1, done: true })
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: true },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+      expect(data.value).toEqual(confirmation)
+    })
+
+    it('passes the latest optimistic state to reconcile', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      mockFetch.mockResolvedValue({ success: true, data: { id: 1, done: true } })
+      const reconcile = vi.fn((_confirmed: { id: number, done: boolean }, current: Todo[]) => current)
+
+      const { execute } = useOptimisticAction<{ id: number }, { id: number, done: boolean }, Todo[]>(
+        '/api/todos/toggle',
+        {
+          currentData: todos,
+          updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, title: 'Edited' } : t),
+          reconcile,
+        },
+      )
+
+      await execute({ id: 1 })
+
+      expect(reconcile).toHaveBeenCalledWith({ id: 1, done: true }, [{ id: 1, title: 'Edited', done: false }])
+    })
+  })
+
+  describe('following currentData', () => {
+    it('follows currentData while no call is running', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      const { optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (_input, current) => current,
+      })
+
+      todos.value = [...todos.value, { id: 2, title: 'Walk dog', done: false }]
+      await nextTick()
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: false },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('keeps the optimistic state while a call is running', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      let resolveFetch: (value: unknown) => void
+      mockFetch.mockReturnValue(new Promise((resolve) => {
+        resolveFetch = resolve
+      }))
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+      })
+
+      const pending = execute({ id: 1 })
+      todos.value = [{ id: 1, title: 'Buy milk', done: false }, { id: 2, title: 'Walk dog', done: false }]
+      await nextTick()
+
+      expect(optimisticData.value).toEqual([{ id: 1, title: 'Buy milk', done: true }])
+
+      resolveFetch!({ success: true, data: [{ id: 1, title: 'Buy milk', done: true }] })
+      await pending
+    })
+
+    it('rolls back to a currentData change that arrived while the call failed', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      let resolveFetch: (value: unknown) => void
+      mockFetch.mockReturnValue(new Promise((resolve) => {
+        resolveFetch = resolve
+      }))
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+      })
+
+      const pending = execute({ id: 1 })
+      todos.value = [{ id: 1, title: 'Buy milk', done: false }, { id: 2, title: 'Walk dog', done: false }]
+      await nextTick()
+      resolveFetch!({ success: false, error: { code: 'FAILED', message: 'Nope', statusCode: 500 } })
+      await pending
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: false },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('reconciles into a currentData change that arrived during the call', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      let resolveFetch: (value: unknown) => void
+      mockFetch.mockReturnValue(new Promise((resolve) => {
+        resolveFetch = resolve
+      }))
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, { id: number, done: boolean }, Todo[]>(
+        '/api/todos/toggle',
+        {
+          currentData: todos,
+          updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+          reconcile: (confirmed, current) => current.map(t => t.id === confirmed.id ? { ...t, done: confirmed.done } : t),
+        },
+      )
+
+      const pending = execute({ id: 1 })
+      todos.value = [{ id: 1, title: 'Buy milk', done: false }, { id: 2, title: 'Walk dog', done: false }]
+      await nextTick()
+      resolveFetch!({ success: true, data: { id: 1, done: true } })
+      await pending
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: true },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('replays the optimistic update on a currentData change before reconciling', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      let resolveFetch: (value: unknown) => void
+      mockFetch.mockReturnValue(new Promise((resolve) => {
+        resolveFetch = resolve
+      }))
+      const { execute, optimisticData } = useOptimisticAction<{ title: string }, Todo, Todo[]>('/api/todos', {
+        currentData: todos,
+        updateFn: (input, current) => [...current, { id: -1, title: input.title, done: false }],
+        reconcile: (created, current) => current.map(t => t.id === -1 ? created : t),
+      })
+
+      const pending = execute({ title: 'Walk dog' })
+      todos.value = [{ id: 1, title: 'Buy milk', done: false }, { id: 2, title: 'Call mom', done: false }]
+      await nextTick()
+      resolveFetch!({ success: true, data: { id: 3, title: 'Walk dog', done: false } })
+      await pending
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: false },
+        { id: 2, title: 'Call mom', done: false },
+        { id: 3, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('rolls the next failed call back to its own snapshot once a change was applied', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      let resolveFetch: (value: unknown) => void
+      mockFetch.mockReturnValueOnce(new Promise((resolve) => {
+        resolveFetch = resolve
+      }))
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+      })
+
+      const first = execute({ id: 1 })
+      todos.value = [{ id: 1, title: 'Buy milk', done: false }, { id: 2, title: 'Walk dog', done: false }]
+      await nextTick()
+      resolveFetch!({
+        success: true,
+        data: [{ id: 1, title: 'Buy milk', done: true }, { id: 2, title: 'Walk dog', done: false }],
+      })
+      await first
+
+      mockFetch.mockResolvedValueOnce({ success: false, error: { code: 'FAILED', message: 'Nope', statusCode: 500 } })
+      await execute({ id: 2 })
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: true },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('builds the optimistic update on a currentData change made just before execute()', () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      mockFetch.mockReturnValueOnce(new Promise(() => {}))
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+      })
+
+      todos.value = [...todos.value, { id: 2, title: 'Walk dog', done: false }]
+      execute({ id: 1 })
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: true },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('rolls back to the snapshot when updateFn mutates currentData in place', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      mockFetch.mockResolvedValueOnce({ success: false, error: { code: 'FAILED', message: 'Nope', statusCode: 500 } })
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => {
+          current.find(t => t.id === input.id)!.done = true
+          return current
+        },
+      })
+
+      await execute({ id: 1 })
+
+      expect(optimisticData.value).toEqual([{ id: 1, title: 'Buy milk', done: false }])
+    })
+
+    it('rolls a chained call back to its own snapshot when updateFn mutates in place', async () => {
+      const todos = ref<Todo[]>([
+        { id: 1, title: 'Buy milk', done: false },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+      mockFetch.mockReturnValueOnce(new Promise(() => {}))
+      mockFetch.mockResolvedValueOnce({ success: false, error: { code: 'FAILED', message: 'Nope', statusCode: 500 } })
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => {
+          current.find(t => t.id === input.id)!.done = true
+          return current
+        },
+      })
+
+      execute({ id: 1 })
+      await execute({ id: 2 })
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: true },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('keeps following currentData after updateFn throws', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: () => {
+          throw new Error('Bad input')
+        },
+      })
+
+      await expect(execute({ id: 1 })).rejects.toThrow('Bad input')
+      todos.value = [{ id: 2, title: 'Walk dog', done: false }]
+
+      expect(optimisticData.value).toEqual([{ id: 2, title: 'Walk dog', done: false }])
+    })
+
+    it('treats a currentData change made in onExecute as a change during the call', () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      mockFetch.mockReturnValueOnce(new Promise(() => {}))
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+        onExecute: () => {
+          todos.value = [...todos.value, { id: 2, title: 'Walk dog', done: false }]
+        },
+      })
+
+      execute({ id: 1 })
+
+      expect(optimisticData.value).toEqual([{ id: 1, title: 'Buy milk', done: true }])
+    })
+
+    it('keeps the optimistic update on cancel() when currentData did not change', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      mockFetch.mockReturnValueOnce(new Promise(() => {}))
+      const { execute, cancel, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+      })
+
+      const pending = execute({ id: 1 })
+      cancel()
+      await pending
+
+      expect(optimisticData.value).toEqual([{ id: 1, title: 'Buy milk', done: true }])
+    })
+
+    it('applies a currentData change that arrived before cancel()', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      mockFetch.mockReturnValueOnce(new Promise(() => {}))
+      const { execute, cancel, optimisticData } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+        currentData: todos,
+        updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+      })
+
+      const pending = execute({ id: 1 })
+      todos.value = [{ id: 1, title: 'Buy milk', done: false }, { id: 2, title: 'Walk dog', done: false }]
+      await nextTick()
+      cancel()
+      await pending
+
+      expect(optimisticData.value).toEqual([
+        { id: 1, title: 'Buy milk', done: false },
+        { id: 2, title: 'Walk dog', done: false },
+      ])
+    })
+
+    it('shows the currentData written in onSuccess', async () => {
+      const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+      mockFetch.mockResolvedValue({ success: true, data: { id: 1, done: true } })
+      const { execute, optimisticData } = useOptimisticAction<{ id: number }, { id: number, done: boolean }, Todo[]>(
+        '/api/todos/toggle',
+        {
+          currentData: todos,
+          updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+          reconcile: (confirmed, current) => current.map(t => t.id === confirmed.id ? { ...t, done: confirmed.done } : t),
+          onSuccess(confirmed) {
+            todos.value = todos.value.map(t => t.id === confirmed.id ? { ...t, done: confirmed.done, title: 'Synced' } : t)
+          },
+        },
+      )
+
+      await execute({ id: 1 })
+      await nextTick()
+
+      expect(optimisticData.value).toEqual([{ id: 1, title: 'Synced', done: true }])
+    })
+  })
+
+  describe('respectRetryAfter', () => {
+    it('keeps the optimistic update while it waits and settles on the retried result', async () => {
+      vi.useFakeTimers()
+      try {
+        const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+        mockFetch
+          .mockResolvedValueOnce({ success: false, error: { code: 'RATE_LIMIT', message: 'Slow down', statusCode: 429, retryAfter: 1 } })
+          .mockResolvedValueOnce({ success: true, data: [{ id: 1, title: 'Buy milk', done: true }] })
+        const { execute, optimisticData, status } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+          currentData: todos,
+          updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+          retry: { count: 1, respectRetryAfter: true },
+        })
+
+        const running = execute({ id: 1 })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(status.value).toBe('executing')
+        expect(optimisticData.value).toEqual([{ id: 1, title: 'Buy milk', done: true }])
+        await vi.advanceTimersByTimeAsync(1000)
+        await running
+
+        expect(mockFetch).toHaveBeenCalledTimes(2)
+        expect(status.value).toBe('success')
+      }
+      finally {
+        vi.useRealTimers()
+      }
     })
   })
 

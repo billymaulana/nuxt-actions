@@ -1,3 +1,7 @@
+---
+description: "Scaffold a typed action file with npx nuxt-actions add, choosing the HTTP method, the target directory, and the validation library."
+---
+
 # CLI Scaffolding
 
 `nuxt-actions` ships a small CLI to scaffold action files.

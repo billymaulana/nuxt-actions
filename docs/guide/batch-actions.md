@@ -1,3 +1,7 @@
+---
+description: "Run several server actions in one call with useActions, in parallel or in sequence, for multi-step workflows and aggregated data."
+---
+
 # Batch Actions
 
 `useActions` lets you execute multiple server actions in a single call, either in parallel (default) or sequentially. This is useful for multi-step workflows, form submissions that trigger multiple backend operations, or aggregating data from several sources.
