@@ -1,3 +1,7 @@
+---
+description: "Why nuxt-actions: Nuxt has great data fetching but no built-in pattern for mutations. See what server actions add and how they compare."
+---
+
 # Why nuxt-actions?
 
 ## The Problem
@@ -77,30 +81,16 @@ That is the entire implementation -- server and client. You get validated input,
 
 Every action call follows the same pipeline. There is no protocol layer and no client to configure -- it is a regular Nitro HTTP request with validation, middleware, and typing built in:
 
-```
- Vue Component
-      │  execute(input)            reactive state: data / error / status
-      ▼
- useAction() ───────────── retry · dedupe · debounce · abort · transform
-      │  $fetch (HTTP POST/GET)
-      ▼
- /api/_actions/<name> ──── generated Nitro route
-      │
-      ▼
- middleware chain ───────── auth · rate limit · CSRF · custom (typed ctx)
-      │  next({ ctx })
-      ▼
- input schema ───────────── Standard Schema validation (Zod/Valibot/ArkType)
-      │  typed input
-      ▼
- handler({ input, ctx }) ── your business logic
-      │
-      ▼
- output schema (optional) ─ response validation
-      │
-      ▼
- ActionResult envelope ──── { success, data } | { success, error }
-```
+<FlowSteps vertical :steps="[
+  { label: 'Vue component', note: 'Calls execute(input) and reads reactive data, error, and status' },
+  { label: 'useAction()', note: 'Retry, deduplication, debounce, abort, and transforms' },
+  { label: '/api/_actions/[name]', note: 'A generated Nitro route, called with $fetch' },
+  { label: 'Input schema', note: 'Standard Schema validation with Zod, Valibot, or ArkType' },
+  { label: 'Middleware chain', note: 'Auth, rate limiting, CSRF, and your own middleware, with typed ctx' },
+  { label: 'handler({ input, ctx })', note: 'Your business logic' },
+  { label: 'Output schema', note: 'Optional response validation' },
+  { label: 'ActionResult', note: '{ success, data } or { success, error }' },
+]" />
 
 Because the boundary is plain HTTP, every action also works with `curl`, Postman, OpenAPI tooling, and any non-Nuxt client.
 
@@ -145,7 +135,7 @@ Because the boundary is plain HTTP, every action also works with `curl`, Postman
 | Actively maintained | :white_check_mark: | :white_check_mark: | :x: 30+ issues | :x: |
 
 ::: tip See it in action
-Explore the [example repository](https://github.com/billymaulana/nuxt-actions-example) for real-world usage with CRUD, streaming, optimistic updates, middleware, and more.
+Browse the [examples](/examples/) for real-world usage with CRUD, streaming, optimistic updates, middleware, and more, or clone the [example repository](https://github.com/billymaulana/nuxt-actions-example).
 :::
 
 ### vs trpc-nuxt

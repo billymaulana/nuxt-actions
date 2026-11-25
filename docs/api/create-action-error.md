@@ -1,3 +1,7 @@
+---
+description: "API reference for createActionError: throw a typed error with a code, message, status, and field errors from handlers or middleware."
+---
+
 # createActionError()
 
 Create a structured, typed error to throw from action handlers or middleware. The error is caught by `defineAction` and returned to the client as a structured `ActionResult` with `success: false`.
@@ -35,7 +39,7 @@ interface ActionError {
 }
 ```
 
-The returned object also has an internal `__isActionError: true` marker (not part of the public type). This marker allows `defineAction` to distinguish action errors from other thrown exceptions and serialize them without leaking internal details.
+The returned object also has an internal `__isActionError: true` marker (not part of the public type). This marker allows `defineAction` to distinguish action errors from other thrown exceptions. It is not enumerable, so it never appears in the JSON sent to the client.
 
 ---
 

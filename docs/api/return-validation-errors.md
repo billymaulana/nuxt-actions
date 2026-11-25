@@ -1,3 +1,7 @@
+---
+description: "API reference for returnValidationErrors: return field-level validation errors from a handler in the standard ActionError format."
+---
+
 # returnValidationErrors()
 
 Throw structured validation errors from an action handler. The error is returned to the client as `{ success: false, error: { code: 'VALIDATION_ERROR', fieldErrors: { ... } } }`.

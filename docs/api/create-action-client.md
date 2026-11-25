@@ -1,3 +1,7 @@
+---
+description: "API reference for createActionClient: the immutable builder for actions with shared middleware, schemas, metadata, and idempotency."
+---
+
 # createActionClient()
 
 Create a builder-based action client for composing actions with shared middleware, schemas, and metadata. Each method returns a new immutable instance, making it safe to share and extend base clients across multiple actions.

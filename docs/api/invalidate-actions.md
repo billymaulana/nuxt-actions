@@ -1,3 +1,7 @@
+---
+description: "API reference for invalidateActions, invalidateTags, and clearActionCache: refetch or clear cached useActionQuery data."
+---
+
 # Cache Invalidation
 
 Utilities to refetch or clear cached data from `useActionQuery`. Useful when a mutation should update related query data.

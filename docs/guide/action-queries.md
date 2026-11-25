@@ -1,9 +1,13 @@
+---
+description: "Fetch data with useActionQuery: SSR-capable GET action queries built on useAsyncData, with caching, typed input, and refetching when the input changes."
+---
+
 # SSR Action Queries
 
 `useActionQuery` wraps Nuxt's `useAsyncData` to provide SSR-capable GET action queries with caching and reactive re-fetching.
 
 ::: tip Working example
-See SSR queries in the [example /queries page](https://github.com/billymaulana/nuxt-actions-example/blob/master/pages/queries.vue) -- server-rendered data with reactive search.
+See SSR queries in the [example /queries page](/examples/queries) -- server-rendered data with reactive search.
 :::
 
 ## Basic Usage

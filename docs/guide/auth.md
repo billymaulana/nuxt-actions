@@ -1,3 +1,7 @@
+---
+description: "Protect actions with defineAuthMiddleware: resolve the current user into ctx.user or reject the request with a 401, with optional anonymous access."
+---
+
 # Authentication
 
 `defineAuthMiddleware` resolves the current user into `ctx.user`, or rejects with a 401.

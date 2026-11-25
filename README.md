@@ -1,94 +1,51 @@
 <p align="center">
-  <img src=".github/assets/logo.svg" width="120" height="120" alt="nuxt-actions logo">
+  <img src=".github/assets/logo.svg" width="96" height="96" alt="nuxt-actions logo">
 </p>
 
 <h1 align="center">nuxt-actions</h1>
 
 <p align="center">
+  Type-safe server actions for Nuxt.<br>
+  Validate input with Zod, Valibot, or ArkType, then call the action from any component with types inferred end to end.
+</p>
+
+<p align="center">
   <a href="https://npmjs.com/package/nuxt-actions"><img src="https://img.shields.io/npm/v/nuxt-actions/latest.svg?style=flat&colorA=020420&colorB=00DC82" alt="npm version"></a>
   <a href="https://npm.chart.dev/nuxt-actions"><img src="https://img.shields.io/npm/dm/nuxt-actions.svg?style=flat&colorA=020420&colorB=00DC82" alt="npm downloads"></a>
+  <a href="https://codecov.io/gh/billymaulana/nuxt-actions"><img src="https://codecov.io/gh/billymaulana/nuxt-actions/graph/badge.svg" alt="Coverage"></a>
   <a href="https://npmjs.com/package/nuxt-actions"><img src="https://img.shields.io/npm/l/nuxt-actions.svg?style=flat&colorA=020420&colorB=00DC82" alt="License"></a>
-  <a href="https://nuxt.com"><img src="https://img.shields.io/badge/Nuxt-020420?logo=nuxt" alt="Nuxt"></a>
-  <a href="https://codecov.io/gh/billymaulana/nuxt-actions"><img src="https://codecov.io/gh/billymaulana/nuxt-actions/graph/badge.svg" alt="codecov"></a>
+  <a href="https://nuxt.com"><img src="https://img.shields.io/badge/Nuxt-3.7%2B%20%7C%204-020420?logo=nuxt" alt="Nuxt 3.7+ and 4"></a>
 </p>
 
 <p align="center">
   <a href="https://billymaulana.github.io/nuxt-actions/">Documentation</a> |
-  <a href="https://stackblitz.com/github/billymaulana/nuxt-actions-example">Playground</a> |
-  <a href="https://github.com/billymaulana/nuxt-actions-example">Example</a>
+  <a href="https://billymaulana.github.io/nuxt-actions/guide/getting-started">Getting started</a> |
+  <a href="https://github.com/billymaulana/nuxt-actions-example">Examples</a> |
+  <a href="https://stackblitz.com/github/billymaulana/nuxt-actions-example">Open in StackBlitz</a> |
+  <a href="./CHANGELOG.md">Changelog</a>
 </p>
 
-<p align="center">
-Type-safe server actions for Nuxt with <a href="https://standardschema.dev/">Standard Schema</a> validation, middleware, builder pattern, and optimistic updates.
-</p>
+## Why nuxt-actions
 
-<p align="center">
-Works with <strong>Zod</strong>, <strong>Valibot</strong>, <strong>ArkType</strong>, and any Standard Schema compliant library.
-</p>
+Nuxt server routes are flexible, but every endpoint repeats the same work: parse the body, validate it, shape errors, and keep the client's types in sync by hand. nuxt-actions turns that into one file per action:
 
----
+- **One definition, two sides.** Write the action once in `server/actions/`. The client imports a typed reference from `#actions`, so input and output types follow the server code with no manual generics.
+- **Any validation library.** Zod, Valibot, ArkType, or any [Standard Schema](https://standardschema.dev/) library, with field-level errors in one consistent shape.
+- **Built for production.** Middleware with typed context, retries, deduplication, optimistic updates, SSR queries, streaming, idempotency, rate limiting, and CSRF protection are part of the module, not something you assemble.
 
-- [Release Notes](/CHANGELOG.md)
+## Quick start
 
-## Features
-
-- **Standard Schema** - Use Zod, Valibot, ArkType, or any compliant validation library
-- **E2E Type Inference** - Import typed action references from `#actions` with zero manual generics
-- **Builder Pattern** - `createActionClient()` for composing actions with shared middleware
-- **Optimistic Updates** - `useOptimisticAction` with race-safe rollback
-- **SSR Queries** - `useActionQuery` wraps `useAsyncData` for SSR, caching, and reactive re-fetching
-- **Smart Cache** - `useActionMutation` auto-refetches affected queries via typed references or tags (`invalidateTags`)
-- **Streaming Actions** - `defineStreamAction` + `useStreamAction` for real-time AI/streaming use cases
-- **Retry/Backoff** - `retry: { count, delay, backoff: 'exponential' | 'linear', maxDelay, jitter }` with thundering-herd protection
-- **Request Deduplication** - `dedupe: 'cancel' | 'defer'`, `cancelPrevious: true`, and manual `cancel()`
-- **Idempotency** - `idempotency` option replays duplicate `Idempotency-Key` requests instead of re-running handlers
-- **Global Hooks** - `action:start/success/error/settled` on `nuxtApp` for analytics, toasts, and monitoring
-- **Typed Error Codes** - `ActionErrorCode` union + client-side `isActionError` for safe narrowing
-- **Grouped Namespace** - `actions.auth.login` mirrors your directory structure alongside flat exports
-- **Custom Headers** - Per-request auth tokens via static headers or function
-- **CLI Scaffold** - `npx nuxt-actions add <name>` generates a typed action file
-- **OpenAPI** - generate an OpenAPI 3.1 document + Swagger UI from your actions
-- **File Uploads** - multipart actions parse files into typed `ActionFile` fields
-- **Auth Preset** - `defineAuthMiddleware` populates `ctx.user` or rejects with 401
-- **HMR Type Updates** - Action file changes update types without restarting dev server
-- **DevTools Tab** - Nuxt DevTools integration showing registered actions
-- **Security Hardened** - Prototype pollution protection, error message sanitization, double `next()` prevention
-- **Output Validation** - Validate server responses, not just inputs
-- **Middleware Chain** - Reusable, composable middleware with typed context accumulation
-- **Type Tests** - 24 compile-time type tests verifying type inference correctness
-- **Zero Config** - Auto-imported, works out of the box
-
-## Quick Setup
-
-Install the module:
+Add the module and a validation library:
 
 ```bash
 npx nuxi module add nuxt-actions
-```
-
-Then install your preferred validation library:
-
-```bash
-# Zod (most popular)
 pnpm add zod
-
-# Valibot (smallest bundle)
-pnpm add valibot
-
-# ArkType (fastest runtime)
-pnpm add arktype
 ```
 
-That's it! All utilities are auto-imported.
-
-## Usage
-
-### Simple Mode: `defineAction`
-
-Create type-safe API routes with automatic input validation:
+Create an action. The file name becomes the endpoint. Actions use POST unless the file name ends in a method suffix such as `.get`:
 
 ```ts
-// server/api/todos.post.ts
+// server/actions/create-todo.ts
 import { z } from 'zod'
 
 export default defineAction({
@@ -96,416 +53,83 @@ export default defineAction({
     title: z.string().min(1, 'Title is required'),
   }),
   handler: async ({ input }) => {
-    const todo = await db.todo.create({ data: input })
-    return todo
+    return { id: Date.now(), title: input.title, done: false }
   },
 })
 ```
 
-Works with **any** Standard Schema library:
-
-```ts
-// With Valibot
-import * as v from 'valibot'
-
-export default defineAction({
-  input: v.object({ title: v.pipe(v.string(), v.minLength(1)) }),
-  handler: async ({ input }) => ({ id: Date.now(), title: input.title }),
-})
-```
-
-```ts
-// With ArkType
-import { type } from 'arktype'
-
-export default defineAction({
-  input: type({ title: 'string > 0' }),
-  handler: async ({ input }) => ({ id: Date.now(), title: input.title }),
-})
-```
-
-### Builder Mode: `createActionClient`
-
-Share middleware, metadata, and configuration across actions:
-
-```ts
-// server/utils/action-clients.ts
-export const authClient = createActionClient()
-  .use(authMiddleware)
-  .use(rateLimitMiddleware)
-
-export const adminClient = createActionClient()
-  .use(authMiddleware)
-  .use(adminMiddleware)
-```
-
-```ts
-// server/api/admin/users.get.ts
-import { z } from 'zod'
-import { adminClient } from '~/server/utils/action-clients'
-
-export default adminClient
-  .schema(z.object({
-    page: z.coerce.number().default(1),
-  }))
-  .metadata({ role: 'admin', action: 'list-users' })
-  .action(async ({ input, ctx }) => {
-    // ctx.user and ctx.isAdmin available from middleware chain
-    return await db.user.findMany({
-      skip: (input.page - 1) * 10,
-      take: 10,
-    })
-  })
-```
-
-### Output Schema Validation
-
-Validate what your server returns, not just what it receives:
-
-```ts
-export default defineAction({
-  input: z.object({ id: z.string() }),
-  outputSchema: z.object({
-    id: z.string(),
-    name: z.string(),
-    email: z.string().email(),
-  }),
-  handler: async ({ input }) => {
-    return await db.user.findUnique({ where: { id: input.id } })
-  },
-})
-```
-
-### Client: `useAction`
-
-Call server actions from Vue components with reactive state:
+Call it from a component. `data` is typed as `{ id: number, title: string, done: boolean }`:
 
 ```vue
 <script setup lang="ts">
 import { createTodo } from '#actions'
 
-// Input and output types are inferred end-to-end from the server action.
-// No manual generics, no method to specify — both come from `createTodo`.
-const { execute, executeAsync, data, error, status, reset } = useAction(createTodo, {
-  onExecute(input) {
-    console.log('Sending:', input)
-  },
-  onSuccess(data) {
-    toast.success(`Created: ${data.title}`)
-  },
-  onError(error) {
-    toast.error(error.message)
-  },
-})
-
-// Option 1: Full result with success/error
-async function handleSubmit(title: string) {
-  const result = await execute({ title })
-  if (result.success) console.log(result.data)
-}
-
-// Option 2: Direct data (throws on error)
-async function handleSubmitAsync(title: string) {
-  try {
-    const todo = await executeAsync({ title })
-    console.log(todo)
-  } catch (err) {
-    // err is ActionError
-  }
-}
+const { execute, data, error, isExecuting } = useAction(createTodo)
 </script>
 
 <template>
-  <form @submit.prevent="handleSubmit('Buy milk')">
-    <button :disabled="status === 'executing'">
-      {{ status === 'executing' ? 'Creating...' : 'Add Todo' }}
-    </button>
-    <p v-if="error" class="error">{{ error.message }}</p>
+  <form @submit.prevent="execute({ title: 'Buy milk' })">
+    <button :disabled="isExecuting">Add todo</button>
+    <p v-if="data">Created {{ data.title }}</p>
+    <p v-if="error">{{ error.fieldErrors?.title?.[0] ?? error.message }}</p>
   </form>
 </template>
 ```
 
-> **Calling external or string-path endpoints?** `useAction` also accepts a plain path with explicit generics as a fallback — `useAction<TInput, TOutput>('/api/todos', { method: 'POST' })`. Prefer the typed reference from `#actions` for internal actions so types stay inferred automatically.
+`defineAction`, `useAction`, and the other utilities are auto-imported. The [getting started guide](https://billymaulana.github.io/nuxt-actions/guide/getting-started) walks through the full setup.
 
-### Optimistic Updates: `useOptimisticAction`
+## What is included
 
-Instant UI updates with automatic rollback on server error:
+| Area | Highlights |
+| --- | --- |
+| Server | [`defineAction`](https://billymaulana.github.io/nuxt-actions/guide/define-action), the [`createActionClient` builder](https://billymaulana.github.io/nuxt-actions/guide/builder-pattern), [middleware](https://billymaulana.github.io/nuxt-actions/guide/middleware) with typed context, [output validation](https://billymaulana.github.io/nuxt-actions/guide/output-validation), [streaming](https://billymaulana.github.io/nuxt-actions/guide/streaming), [file uploads](https://billymaulana.github.io/nuxt-actions/guide/file-uploads), [idempotency](https://billymaulana.github.io/nuxt-actions/guide/idempotency) |
+| Client | [`useAction`](https://billymaulana.github.io/nuxt-actions/guide/use-action), [SSR queries](https://billymaulana.github.io/nuxt-actions/guide/action-queries), [cache invalidation](https://billymaulana.github.io/nuxt-actions/guide/cache-invalidation), [optimistic updates](https://billymaulana.github.io/nuxt-actions/guide/optimistic-updates), [infinite queries](https://billymaulana.github.io/nuxt-actions/guide/infinite-queries), [form actions](https://billymaulana.github.io/nuxt-actions/guide/form-actions), [batch actions](https://billymaulana.github.io/nuxt-actions/guide/batch-actions) |
+| Production | Retry with backoff, request deduplication and cancellation, [rate limiting and CSRF](https://billymaulana.github.io/nuxt-actions/guide/security), an [auth preset](https://billymaulana.github.io/nuxt-actions/guide/auth), [global hooks](https://billymaulana.github.io/nuxt-actions/guide/observability) |
+| Tooling | [OpenAPI 3.1 and Swagger UI](https://billymaulana.github.io/nuxt-actions/guide/openapi), a Nuxt DevTools tab, [`npx nuxt-actions add`](https://billymaulana.github.io/nuxt-actions/guide/cli) scaffolding, type updates on save |
 
-```vue
-<script setup lang="ts">
-const todos = ref([
-  { id: 1, title: 'Buy milk', done: false },
-  { id: 2, title: 'Walk dog', done: true },
-])
+## Compatibility
 
-const { execute, optimisticData } = useOptimisticAction('/api/todos/toggle', {
-  method: 'PATCH',
-  currentData: todos,
-  updateFn: (input, current) =>
-    current.map(t => t.id === input.id ? { ...t, done: !t.done } : t),
-  onError(error) {
-    toast.error('Failed to update - changes reverted')
-  },
-})
-</script>
+| | Supported |
+| --- | --- |
+| Nuxt | 3.7 and later, every Nuxt 4 release |
+| Server runtime | Nitro v2, and Nitro v3 on Nuxt 4.7+ ([details](https://billymaulana.github.io/nuxt-actions/guide/server-runtimes)) |
+| Validation | Zod 3.24+ and 4, Valibot 1.0+, ArkType 2.1+, any Standard Schema library |
+| Node.js | The version your Nuxt release requires (22 or 24 for Nuxt 4.7) |
 
-<template>
-  <ul>
-    <li v-for="todo in optimisticData" :key="todo.id">
-      <input
-        type="checkbox"
-        :checked="todo.done"
-        @change="execute({ id: todo.id })"
-      >
-      {{ todo.title }}
-    </li>
-  </ul>
-</template>
+Every release runs the same end-to-end suite on Nitro v2, Nitro v3, Nitro v3 without `nitroLegacy`, and a Nuxt 5 preview.
+
+## How it compares
+
+| | nuxt-actions | [trpc-nuxt](https://github.com/wobsoriano/trpc-nuxt) | [next-safe-action](https://github.com/TheEdoRan/next-safe-action) |
+| --- | --- | --- | --- |
+| Framework | Nuxt | Nuxt | Next.js |
+| Validation | Any Standard Schema library | Zod | Zod, Yup, Valibot |
+| End-to-end type inference | Yes | Yes | Yes |
+| Builder pattern | Yes | No | Yes |
+| Middleware with typed context | Yes | Yes | Yes |
+| Optimistic updates | Yes | No | Yes |
+| SSR queries | Yes | Yes | No |
+| Streaming (SSE) | Yes | No | No |
+| Retry and deduplication | Yes | No | No |
+| Uses plain Nuxt server routes | Yes | No, tRPC protocol | Not applicable |
+
+## Contributing
+
+```bash
+pnpm install
+pnpm run dev:prepare   # build the module stub and generate types
+pnpm run dev           # start the playground
+pnpm run lint
+pnpm run test:unit
+pnpm run test:e2e      # Nitro v2, Nitro v3, and Nuxt 5 preview fixtures
+pnpm run prepack       # build the module
 ```
 
-### Middleware
-
-Create reusable middleware for cross-cutting concerns:
-
-```ts
-// server/utils/auth.ts
-export const authMiddleware = defineMiddleware(async ({ event, next }) => {
-  const session = await getUserSession(event)
-  if (!session) {
-    throw createActionError({
-      code: 'UNAUTHORIZED',
-      message: 'Authentication required',
-      statusCode: 401,
-    })
-  }
-  return next({ ctx: { user: session.user } })
-})
-```
-
-Publish standalone middleware as npm packages:
-
-```ts
-// Published as `nuxt-actions-ratelimit`
-export const rateLimitMiddleware = createMiddleware(async ({ event, next }) => {
-  await checkRateLimit(event)
-  return next()
-})
-```
-
-### Error Handling
-
-Throw typed errors from handlers or middleware:
-
-```ts
-throw createActionError({
-  code: 'NOT_FOUND',
-  message: 'Todo not found',
-  statusCode: 404,
-})
-
-// With field-level errors
-throw createActionError({
-  code: 'VALIDATION_ERROR',
-  message: 'Duplicate entry',
-  statusCode: 422,
-  fieldErrors: {
-    email: ['Email is already taken'],
-  },
-})
-```
-
-All errors follow a consistent format:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Input validation failed",
-    "statusCode": 422,
-    "fieldErrors": {
-      "title": ["Title is required"],
-      "email": ["Invalid email address"]
-    }
-  }
-}
-```
-
-## API Reference
-
-### Server Utilities
-
-#### `defineAction(options)`
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `input` | `StandardSchema` | Any Standard Schema compliant schema for input validation |
-| `outputSchema` | `StandardSchema` | Schema for output validation |
-| `middleware` | `ActionMiddleware[]` | Array of middleware functions |
-| `metadata` | `Record<string, unknown>` | Metadata for logging/analytics |
-| `handler` | `(params) => Promise<T>` | Handler receiving `{ input, event, ctx }` |
-
-#### `createActionClient(options?)`
-
-| Method | Description |
-|--------|-------------|
-| `.use(middleware)` | Add middleware to the chain |
-| `.schema(inputSchema)` | Set input validation schema |
-| `.metadata(meta)` | Attach metadata |
-| **After `.schema()`:** | |
-| `.outputSchema(schema)` | Set output validation schema |
-| `.metadata(meta)` | Attach metadata |
-| `.action(handler)` | Terminal - creates the event handler |
-
-#### `defineMiddleware(fn)` / `createMiddleware(fn)`
-
-Define a typed middleware function. `createMiddleware` is an alias that signals intent for publishable middleware.
-
-#### `createActionError(options)`
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `code` | `string` | required | Error code identifier |
-| `message` | `string` | required | Human-readable message |
-| `statusCode` | `number` | `400` | HTTP status code |
-| `fieldErrors` | `Record<string, string[]>` | - | Field-level errors |
-
-### Client Composables
-
-#### `useAction(action, options?)` / `useAction<TInput, TOutput>(path, options?)`
-
-Two overloads: pass a typed reference from `#actions` for end-to-end inferred input/output (recommended), or a string path with explicit generics for external/untyped endpoints.
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `method` | `HttpMethod` | `'POST'` | HTTP method |
-| `headers` | `Record<string, string> \| () => Record` | - | Static or dynamic headers |
-| `retry` | `boolean \| number \| RetryConfig` | `false` | Retry configuration |
-| `dedupe` | `'cancel' \| 'defer'` | - | Request deduplication |
-| `onExecute` | `(input) => void` | - | Called before fetch |
-| `onSuccess` | `(data) => void` | - | Success callback |
-| `onError` | `(error) => void` | - | Error callback |
-| `onSettled` | `(result) => void` | - | Settled callback |
-
-Returns:
-
-`{ execute, executeAsync, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
-
-#### `useOptimisticAction<TInput, TOutput>(path, options)`
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `method` | `HttpMethod` | HTTP method (default: `'POST'`) |
-| `headers` | `Record<string, string> \| () => Record` | Static or dynamic headers |
-| `retry` | `boolean \| number \| RetryConfig` | Retry configuration |
-| `currentData` | `Ref<TOutput>` | Source of truth data ref |
-| `updateFn` | `(input, current) => TOutput` | Optimistic update function |
-
-Returns:
-
-`{ execute, optimisticData, data, error, status, isIdle, isExecuting, hasSucceeded, hasErrored, reset }`
-
-#### `useActionQuery(action, input?, options?)`
-
-SSR-capable GET action query wrapping `useAsyncData`:
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `server` | `boolean` | `true` | Run on SSR |
-| `lazy` | `boolean` | `false` | Don't block navigation |
-| `immediate` | `boolean` | `true` | Execute immediately |
-| `default` | `() => T` | - | Default value factory |
-
-Returns:
-
-`{ data, error, status, pending, refresh, clear }`
-
-#### `useStreamAction(action, options?)`
-
-Client composable for streaming server actions:
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `onChunk` | `(chunk) => void` | Called for each chunk |
-| `onDone` | `(allChunks) => void` | Called when stream completes |
-| `onError` | `(error) => void` | Called on error |
-
-Returns:
-
-`{ execute, stop, chunks, data, status, error }`
-
-#### `defineStreamAction(options)`
-
-Server-side streaming action with SSE:
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `input` | `StandardSchema` | Input validation schema |
-| `middleware` | `ActionMiddleware[]` | Middleware chain |
-| `handler` | `({ input, event, ctx, stream }) => void` | Streaming handler |
-
-## Why nuxt-actions?
-
-<table>
-<tr>
-<th align="left">Feature</th>
-<th align="center">nuxt-actions</th>
-<th align="center"><a href="https://github.com/wobsoriano/trpc-nuxt">trpc-nuxt</a></th>
-<th align="center"><a href="https://github.com/TheEdoRan/next-safe-action">next-safe-action</a></th>
-</tr>
-<tr><td>Framework</td><td align="center">Nuxt</td><td align="center">Nuxt</td><td align="center">Next.js</td></tr>
-<tr><td>Standard Schema (Zod + Valibot + ArkType)</td><td align="center">&#9989;</td><td align="center">Zod only</td><td align="center">Zod / Yup / Valibot</td></tr>
-<tr><td>E2E type inference</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#9989;</td></tr>
-<tr><td>Builder pattern</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#9989;</td></tr>
-<tr><td>Middleware with typed context</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#9989;</td></tr>
-<tr><td>Optimistic updates composable</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#9989;</td></tr>
-<tr><td>SSR queries</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#10060;</td></tr>
-<tr><td>Streaming actions (SSE)</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-<tr><td>Retry / backoff</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-<tr><td>Request deduplication</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-<tr><td>Output schema validation</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#9989;</td></tr>
-<tr><td>DevTools integration</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-<tr><td>HMR type updates</td><td align="center">&#9989;</td><td align="center">&#9989;</td><td align="center">&#10060;</td></tr>
-<tr><td>Security hardening (6 layers)</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-<tr><td>Zero config</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#9989;</td></tr>
-<tr><td>Nuxt-native (no protocol layer)</td><td align="center">&#9989;</td><td align="center">&#10060;</td><td align="center">&#10060;</td></tr>
-</table>
+Bug reports and pull requests are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening one.
 
 ## Sponsors
 
-If you find this module useful, consider supporting the project:
-
-<a href="https://github.com/sponsors/billymaulana">
-  <img src="https://img.shields.io/badge/Sponsor-EA4AAA?logo=github-sponsors&logoColor=white&style=for-the-badge" alt="Sponsor">
-</a>
-
-## Contribution
-
-<details>
-  <summary>Local development</summary>
-
-  ```bash
-  # Install dependencies
-  pnpm install
-
-  # Generate type stubs
-  pnpm run dev:prepare
-
-  # Develop with the playground
-  pnpm run dev
-
-  # Run ESLint
-  pnpm run lint
-
-  # Run Vitest
-  pnpm run test
-  pnpm run test:watch
-
-  # Build the module
-  pnpm run prepack
-  ```
-
-</details>
+If nuxt-actions saves you time, you can support its development on [GitHub Sponsors](https://github.com/sponsors/billymaulana).
 
 ## License
 

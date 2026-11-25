@@ -1,3 +1,7 @@
+---
+description: "API reference for rateLimitMiddleware: limit requests per client within a time window, with custom keys, messages, and memory bounds."
+---
+
 # rateLimitMiddleware()
 
 In-memory rate limiting middleware for actions. Tracks request counts per client key within a sliding time window.
@@ -17,7 +21,7 @@ interface RateLimitConfig {
   /** Time window in milliseconds. Default: 60000 (1 minute) */
   window?: number
   /** Custom key function to identify the client. Default: IP address */
-  keyFn?: (event: H3Event) => string
+  keyFn?: (event: ServerEvent) => string
   /** Custom error message. Default: 'Too many requests' */
   message?: string
 }
@@ -27,7 +31,7 @@ interface RateLimitConfig {
 |-----------|------|----------|---------|-------------|
 | `limit` | `number` | Yes | - | Maximum requests per window |
 | `window` | `number` | No | `60000` | Window duration in milliseconds |
-| `keyFn` | `(event: H3Event) => string` | No | IP address | Client identification function |
+| `keyFn` | `(event: ServerEvent) => string` | No | IP address | Client identification function |
 | `message` | `string` | No | `'Too many requests'` | Error message when limit exceeded |
 
 ---

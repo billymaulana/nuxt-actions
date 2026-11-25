@@ -1,3 +1,7 @@
+---
+description: "Validate what your actions return with outputSchema, catching leaked fields and broken contracts before the response reaches the client."
+---
+
 # Output Validation
 
 Input validation ensures your server receives correct data. Output validation ensures your server **returns** correct data. The `outputSchema` option lets you validate the handler's return value before it reaches the client.
