@@ -1,13 +1,13 @@
 ---
 title: Security Middleware
-description: Rate limit an action with rateLimitMiddleware and protect a mutation with csrfMiddleware, with the browser reading the token cookie and sending it back as a header.
+description: Rate limit an action with rateLimitMiddleware and Retry-After, reject cross-site posts with originMiddleware, and protect a mutation with csrfMiddleware from the browser.
 ---
 
 # Security Middleware
 
-nuxt-actions ships `rateLimitMiddleware` and `csrfMiddleware` as regular action middleware. This example runs both live: the rate-limited action accepts five requests per ten seconds from a client, and the sixth gets a 429 with the configured message. The CSRF part issues a token cookie, reads it with `document.cookie`, and sends it back in the `x-csrf-token` header, so you can watch a save succeed with the token and fail with a 403 without it.
+nuxt-actions ships `rateLimitMiddleware`, `originMiddleware`, and `csrfMiddleware` as regular action middleware. This example runs all three. The rate-limited action accepts five requests per ten seconds from a client; after that the server says how long to wait, and one button waits for it and retries. The origin check accepts the page's own request with no token involved. The CSRF part issues a token cookie, reads it with `document.cookie`, and sends it back in the `x-csrf-token` header, so you can watch a save succeed with the token and fail with a 403 without it.
 
-<ExampleSource page="pages/security.vue" />
+<ExampleSource page="pages/security.vue" :embed="false" />
 
 ## Server actions
 
@@ -22,12 +22,23 @@ export default defineAction({
     rateLimitMiddleware({
       limit: 5,
       window: 10000,
+      headers: true,
       message: 'Too many requests, wait 10 seconds',
     }),
   ],
   handler: async ({ input }) => {
     return { echo: input.message, timestamp: Date.now() }
   },
+})
+```
+
+```ts [server/actions/origin-protected.post.ts]
+import { z } from 'zod'
+
+export default defineAction({
+  input: z.object({ note: z.string() }),
+  middleware: [originMiddleware()],
+  handler: async ({ input }) => ({ saved: input.note, at: Date.now() }),
 })
 ```
 
@@ -60,7 +71,7 @@ export default defineAction({
 ```vue [pages/security.vue]
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { csrfToken as csrfTokenAction, protectedNote, rateLimitedAction } from '#actions'
+import { csrfToken as csrfTokenAction, originProtected, protectedNote, rateLimitedAction } from '#actions'
 
 const csrfToken = ref('')
 const cookieBlocked = ref(false)
@@ -98,33 +109,57 @@ onMounted(() => {
 const requestCount = ref(0)
 const resetCountdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
-let windowStart = 0
+
+function startCountdown(seconds: number) {
+  if (countdownTimer) clearInterval(countdownTimer)
+  resetCountdown.value = seconds
+  const timer = setInterval(() => {
+    resetCountdown.value--
+    if (resetCountdown.value <= 0) {
+      clearInterval(timer)
+      countdownTimer = null
+    }
+  }, 1000)
+  countdownTimer = timer
+}
 
 const rateLimitAction = useAction(rateLimitedAction, {
-  onError() {
-    if (!countdownTimer) {
-      const elapsed = Date.now() - windowStart
-      const remaining = Math.ceil((10000 - elapsed) / 1000)
-      resetCountdown.value = Math.max(remaining, 1)
-      countdownTimer = setInterval(() => {
-        resetCountdown.value--
-        if (resetCountdown.value <= 0) {
-          clearInterval(countdownTimer!)
-          countdownTimer = null
-          requestCount.value = 0
-        }
-      }, 1000)
-    }
+  onError(error) {
+    if (error.code === 'RATE_LIMIT' && error.retryAfter) startCountdown(error.retryAfter)
   },
 })
 
+const waitingAction = useAction(rateLimitedAction, {
+  retry: { count: 1, respectRetryAfter: true, maxDelay: 10_000 },
+})
+
 function handleRateLimit() {
-  if (requestCount.value === 0) {
-    windowStart = Date.now()
-  }
   requestCount.value++
   rateLimitAction.execute({ message: `Request #${requestCount.value}` })
 }
+
+function handleWaitingRequest() {
+  requestCount.value++
+  waitingAction.execute({ message: `Request #${requestCount.value}` })
+}
+
+const limitHeaders = ref<Record<string, string> | null>(null)
+
+async function inspectHeaders() {
+  requestCount.value++
+  const response = await $fetch.raw('/api/_actions/rate-limited-action', {
+    method: 'POST',
+    body: { message: `Request #${requestCount.value}` },
+  })
+  limitHeaders.value = Object.fromEntries(
+    ['ratelimit-limit', 'ratelimit-remaining', 'ratelimit-reset', 'retry-after']
+      .map(name => [name, response.headers.get(name)])
+      .filter((entry): entry is [string, string] => entry[1] !== null),
+  )
+}
+
+const origin = useRequestURL().origin
+const originNote = useAction(originProtected)
 
 onUnmounted(() => {
   if (countdownTimer) {
@@ -137,23 +172,43 @@ onUnmounted(() => {
   <div>
     <section>
       <button :disabled="rateLimitAction.isExecuting.value" @click="handleRateLimit">
-        {{ rateLimitAction.isExecuting.value ? 'Sending...' : 'Send Request' }}
+        {{ rateLimitAction.isExecuting.value ? 'Sending...' : 'Send request' }}
       </button>
-      <span>Sent: {{ requestCount }} | Remaining: {{ Math.max(0, 5 - requestCount) }}</span>
-
-      <div v-if="rateLimitAction.hasSucceeded.value" class="success">
-        Echo: {{ rateLimitAction.data.value.echo }}
-        ({{ new Date(rateLimitAction.data.value.timestamp).toLocaleTimeString() }})
-      </div>
+      <button :disabled="waitingAction.isExecuting.value" @click="handleWaitingRequest">
+        {{ waitingAction.isExecuting.value ? 'Waiting for the limit...' : 'Send, waiting for Retry-After' }}
+      </button>
+      <button @click="inspectHeaders">
+        Inspect headers
+      </button>
+      <span>Sent: {{ requestCount }}</span>
 
       <div v-if="rateLimitAction.hasErrored.value" class="error">
-        {{ rateLimitAction.error.value?.statusCode }} —
+        {{ rateLimitAction.error.value?.statusCode }} {{ rateLimitAction.error.value?.code }}:
         {{ rateLimitAction.error.value?.message }}
       </div>
-
       <div v-if="resetCountdown > 0">
-        Window resets in {{ resetCountdown }}s
+        The server asked to wait {{ resetCountdown }}s before the next request
       </div>
+      <div v-if="waitingAction.hasSucceeded.value && waitingAction.data.value" class="success">
+        Waited and retried: {{ waitingAction.data.value.echo }}
+      </div>
+      <div v-if="limitHeaders">
+        <code v-for="(value, name) in limitHeaders" :key="name">{{ name }}: {{ value }}</code>
+      </div>
+    </section>
+
+    <section>
+      <button :disabled="originNote.isExecuting.value" @click="originNote.execute({ note: 'Saved from this page' })">
+        Save from this page
+      </button>
+      <div v-if="originNote.hasSucceeded.value && originNote.data.value" class="success">
+        Saved "{{ originNote.data.value.saved }}"
+      </div>
+      <pre>curl -X POST {{ origin }}/api/_actions/origin-protected \
+  -H 'content-type: application/json' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'origin: https://evil.example' \
+  -d '{"note":"forged"}'</pre>
     </section>
 
     <section>
@@ -188,9 +243,11 @@ The markup is trimmed for readability, without the written walkthroughs of the o
 
 ## How it works
 
-- `rateLimitMiddleware({ limit: 5, window: 10000 })` counts requests per client key in a ten-second window. The sixth request fails with code `RATE_LIMIT`, status 429, and the custom `message`.
-- The limiter keeps its counters in server memory, so they reset when the server restarts and are not shared between server instances.
-- The "Remaining" counter on the page is a client-side estimate. The server alone decides when a request is rejected, and `onError` starts the countdown.
+- `rateLimitMiddleware({ limit: 5, window: 10000, headers: true })` counts requests per client key in a ten-second window. The sixth request fails with code `RATE_LIMIT`, status 429, the custom `message`, and `retryAfter`, the seconds until the window ends. The countdown on the page starts from that value.
+- "Send, waiting for Retry-After" uses `retry: { count: 1, respectRetryAfter: true }`. When the server rejects it, the composable waits the `retryAfter` seconds and sends it once more, so the button stays busy and then succeeds.
+- `headers: true` adds `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` to every response, and a rejected request also carries `Retry-After`. `useAction` returns the result, not the response, so "Inspect headers" sends the request with `$fetch.raw` to show them.
+- The limiter keeps its counters in server memory, so they reset when the server restarts and are not shared between server instances. A shared `store` fixes both.
+- `originMiddleware()` accepts the page's save because the browser marks it `Sec-Fetch-Site: same-origin`. The `curl` command claims to come from another site, which the middleware rejects with `CSRF_ERROR` and status 403. A real cross-site page cannot change those headers.
 - "Get CSRF token" calls a GET action that uses `csrfMiddleware()`. The middleware sets the `_csrf` cookie and keeps the same token on later safe requests.
 - The cookie is readable from JavaScript on purpose: a page on another site can make the browser send it, but cannot read it to fill the `x-csrf-token` header. The `headers` function reads it on every call.
 - The token cookie is `Secure`. Safari does not store it on `http://localhost`, and no browser stores it on another plain-HTTP host, so the page explains this when the cookie is missing after "Get CSRF token".
@@ -199,4 +256,4 @@ The markup is trimmed for readability, without the written walkthroughs of the o
 ## Related
 
 - Guide: [Security](/guide/security)
-- API: [rateLimitMiddleware](/api/rate-limit-middleware), [csrfMiddleware](/api/csrf-middleware)
+- API: [rateLimitMiddleware](/api/rate-limit-middleware), [originMiddleware](/api/origin-middleware), [csrfMiddleware](/api/csrf-middleware), [useAction retry](/api/use-action#retry)

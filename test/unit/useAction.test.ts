@@ -468,6 +468,57 @@ describe('useAction', () => {
   // ── New Phase 1 features ────────────────────────────────────────
 
   describe('retry', () => {
+    it('retries a RATE_LIMIT result after retryAfter when respectRetryAfter is on', async () => {
+      vi.useFakeTimers()
+      try {
+        mockFetch
+          .mockResolvedValueOnce({ success: false, error: { code: 'RATE_LIMIT', message: 'Slow down', statusCode: 429, retryAfter: 1 } })
+          .mockResolvedValueOnce({ success: true, data: { ok: true } })
+        const { execute, data, status } = useAction('/api/test', { retry: { count: 1, respectRetryAfter: true } })
+
+        const running = execute({})
+        await vi.advanceTimersByTimeAsync(0)
+        expect(status.value).toBe('executing')
+        await vi.advanceTimersByTimeAsync(1000)
+
+        await expect(running).resolves.toEqual({ success: true, data: { ok: true } })
+        expect(mockFetch).toHaveBeenCalledTimes(2)
+        expect(data.value).toEqual({ ok: true })
+      }
+      finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does not retry a RATE_LIMIT result without respectRetryAfter', async () => {
+      mockFetch.mockResolvedValue({ success: false, error: { code: 'RATE_LIMIT', message: 'Slow down', statusCode: 429, retryAfter: 1 } })
+
+      const { execute } = useAction('/api/test', { retry: { count: 2 } })
+      await execute({})
+
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('cancel() stops waiting for retryAfter', async () => {
+      vi.useFakeTimers()
+      try {
+        mockFetch.mockResolvedValue({ success: false, error: { code: 'RATE_LIMIT', message: 'Slow down', statusCode: 429, retryAfter: 5 } })
+        const { execute, cancel, status } = useAction('/api/test', { retry: { count: 2, respectRetryAfter: true } })
+
+        const running = execute({})
+        await vi.advanceTimersByTimeAsync(0)
+        cancel()
+
+        await expect(running).resolves.toMatchObject({ success: false, error: { code: 'ABORT_ERROR' } })
+        expect(status.value).toBe('idle')
+        expect(mockFetch).toHaveBeenCalledTimes(1)
+        expect(vi.getTimerCount()).toBe(0)
+      }
+      finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('passes retry=3 when retry is true', async () => {
       mockFetch.mockResolvedValue({ success: true, data: {} })
 

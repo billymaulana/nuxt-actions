@@ -60,10 +60,7 @@ const optimisticAction = useOptimisticAction(toggleTodo, {
     )
   },
   onSuccess(data) {
-    const index = todos.value.findIndex(t => t.id === data.id)
-    if (index !== -1) {
-      todos.value[index] = { ...todos.value[index], done: data.done }
-    }
+    todos.value = todos.value.map(t => (t.id === data.id ? { ...t, done: data.done } : t))
   },
 })
 

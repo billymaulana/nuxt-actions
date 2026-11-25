@@ -14,14 +14,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -33,14 +33,14 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -49,11 +49,11 @@ jobs:
       - name: Prepare module
         run: pnpm run dev:prepare
 
-      - name: Type check module and playground
-        run: pnpm run test:types
-
       - name: Build module
         run: pnpm run prepack
+
+      - name: Type check module, playground, and example
+        run: pnpm run test:types
 
       - name: Run type tests
         run: pnpm run test:type-tests
@@ -62,14 +62,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [22, 24]
+        node-version: [22, 24, 26]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
@@ -83,9 +83,12 @@ jobs:
       - name: Run unit tests with coverage
         run: pnpm run test:coverage
 
+      - name: Run testing helper tests
+        run: pnpm run test:testing
+
       - name: Upload coverage to Codecov
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.node-version == 24
-        uses: codecov/codecov-action@v5
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.node-version == 26
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/coverage-final.json
@@ -98,14 +101,14 @@ jobs:
       matrix:
         runtime: [nitro-v2, nitro-v3, nitro-v3-strict, nitro-v3-dev, nuxt5-preview]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies
@@ -117,18 +120,40 @@ jobs:
       - name: Run e2e tests on ${{ matrix.runtime }}
         run: pnpm run test:e2e test/e2e/${{ matrix.runtime }}.test.ts
 
-  build:
+  example:
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, e2e]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare module and example
+        run: pnpm run dev:prepare
+
+      - name: Run example tests
+        run: pnpm run test:example
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, e2e, example]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
           cache: pnpm
 
       - name: Install dependencies

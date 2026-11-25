@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
-import { setup, $fetch, fetch } from '@nuxt/test-utils/e2e'
+import { setup, $fetch, fetch, url } from '@nuxt/test-utils/e2e'
 
 export type E2EFixture = 'basic' | 'nitro-v3' | 'nitro-v3-strict' | 'nuxt5-preview'
 
@@ -587,6 +587,86 @@ export function defineActionsE2ESuite(fixture: E2EFixture): void {
         }
         expect(results.map(result => result.success)).toEqual([true, true, false])
         expect(results[2].error).toMatchObject({ code: 'RATE_LIMIT', statusCode: 429 })
+      })
+
+      it('serves a GET action from the server cache until it is invalidated', async () => {
+        const first = await $fetch('/api/_actions/cached-count')
+        const second = await $fetch('/api/_actions/cached-count')
+        expect(second).toEqual(first)
+
+        await $fetch('/api/_actions/invalidate-cache', { method: 'POST', body: { path: 'cached-count' } })
+        const fresh = await $fetch('/api/_actions/cached-count')
+        expect(fresh.data.call).toBe(first.data.call + 1)
+      })
+
+      it('keeps cached results per key and invalidates one key', async () => {
+        const as = (user: string) => $fetch('/api/_actions/cached-per-user', { headers: { 'x-user': user } })
+        const ada = await as('ada')
+        const grace = await as('grace')
+        expect(grace.data).toMatchObject({ user: 'grace', call: ada.data.call + 1 })
+        expect(await as('ada')).toEqual(ada)
+
+        await $fetch('/api/_actions/invalidate-cache', { method: 'POST', body: { path: 'cached-per-user', key: 'ada' } })
+        expect((await as('ada')).data.call).toBe(grace.data.call + 1)
+        expect(await as('grace')).toEqual(grace)
+      })
+
+      it('callAction runs another action from server code', async () => {
+        const result = await $fetch('/api/_actions/call-double', { method: 'POST', body: { value: 21 } })
+        expect(result).toEqual({ success: true, data: { success: true, data: { doubled: 42 } } })
+      })
+
+      it('callAction returns the inner validation error as a result', async () => {
+        const result = await $fetch('/api/_actions/call-double', { method: 'POST', body: { value: 'x' } })
+        expect(result).toMatchObject({ success: true, data: { success: false, error: { code: 'VALIDATION_ERROR', statusCode: 422 } } })
+      })
+
+      it('originMiddleware accepts a request without browser headers', async () => {
+        const result = await $fetch('/api/_actions/origin-check', { method: 'POST', body: {} })
+        expect(result).toEqual({ success: true, data: { ok: true } })
+      })
+
+      it('originMiddleware rejects a cross-site request', async () => {
+        const result = await $fetch('/api/_actions/origin-check', {
+          method: 'POST',
+          body: {},
+          headers: { 'sec-fetch-site': 'cross-site', 'origin': 'https://evil.example' },
+        })
+        expect(result.error).toMatchObject({ code: 'CSRF_ERROR', statusCode: 403 })
+      })
+
+      it('originMiddleware accepts an allowed origin', async () => {
+        const result = await $fetch('/api/_actions/origin-check', {
+          method: 'POST',
+          body: {},
+          headers: { 'sec-fetch-site': 'cross-site', 'origin': 'https://trusted.example' },
+        })
+        expect(result).toEqual({ success: true, data: { ok: true } })
+      })
+
+      it('originMiddleware accepts an older browser whose Origin matches the server host', async () => {
+        const result = await $fetch('/api/_actions/origin-check', {
+          method: 'POST',
+          body: {},
+          headers: { origin: new URL(url('/')).origin },
+        })
+        expect(result).toEqual({ success: true, data: { ok: true } })
+      })
+
+      it('sends RateLimit headers and Retry-After through the action response', async () => {
+        const init = { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }
+
+        const first = await fetch('/api/_actions/limited-headers', init)
+        expect(first.headers.get('ratelimit-limit')).toBe('1')
+        expect(first.headers.get('ratelimit-remaining')).toBe('0')
+        expect(Number(first.headers.get('ratelimit-reset'))).toBeGreaterThan(0)
+        expect(await first.json()).toEqual({ success: true, data: { ok: true } })
+
+        const second = await fetch('/api/_actions/limited-headers', init)
+        const body = await second.json()
+        expect(body.error).toMatchObject({ code: 'RATE_LIMIT', statusCode: 429 })
+        expect(body.error.retryAfter).toBeGreaterThanOrEqual(1)
+        expect(Number(second.headers.get('retry-after'))).toBe(body.error.retryAfter)
       })
 
       it('marks replayed idempotent responses with a header', async () => {

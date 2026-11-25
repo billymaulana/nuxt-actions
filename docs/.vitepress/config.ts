@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitepress'
 import type { HeadConfig } from 'vitepress'
-import { exampleGroups } from './examples'
+import { DEMO_ORIGIN, exampleGroups } from './examples'
 
 const SITE_URL = 'https://billymaulana.github.io/nuxt-actions/'
 const SITE_NAME = 'nuxt-actions'
@@ -231,9 +231,9 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '^/guide/' },
       { text: 'API', link: '/api/define-action', activeMatch: '^/api/' },
       { text: 'Examples', link: '/examples/', activeMatch: '^/examples/' },
-      { text: 'Playground', link: 'https://stackblitz.com/github/billymaulana/nuxt-actions-example' },
+      { text: 'Live demo', link: DEMO_ORIGIN },
       {
-        text: 'v1.3.0',
+        text: 'v1.5.0',
         items: [
           { text: 'Changelog', link: 'https://github.com/billymaulana/nuxt-actions/blob/main/CHANGELOG.md' },
         ],
@@ -283,8 +283,10 @@ export default defineConfig({
             { text: 'File Uploads', link: '/guide/file-uploads' },
             { text: 'Authentication', link: '/guide/auth' },
             { text: 'Idempotency', link: '/guide/idempotency' },
+            { text: 'Caching', link: '/guide/caching' },
             { text: 'Observability', link: '/guide/observability' },
             { text: 'Server Runtimes', link: '/guide/server-runtimes' },
+            { text: 'Testing', link: '/guide/testing' },
           ],
         },
       ],
@@ -299,8 +301,10 @@ export default defineConfig({
             { text: 'defineAuthMiddleware', link: '/api/auth-middleware' },
             { text: 'createActionError', link: '/api/create-action-error' },
             { text: 'returnValidationErrors', link: '/api/return-validation-errors' },
+            { text: 'callAction', link: '/api/call-action' },
             { text: 'rateLimitMiddleware', link: '/api/rate-limit-middleware' },
             { text: 'csrfMiddleware', link: '/api/csrf-middleware' },
+            { text: 'originMiddleware', link: '/api/origin-middleware' },
             { text: 'Idempotency', link: '/api/idempotency' },
           ],
         },

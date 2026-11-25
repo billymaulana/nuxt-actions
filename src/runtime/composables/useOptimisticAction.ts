@@ -11,7 +11,7 @@ import type {
   InferActionInput,
   InferActionOutput,
 } from '../types'
-import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, abortResult, raceAbort } from './_utils'
+import { buildFetchOptions, createDebouncedFn, createThrottledFn, emitActionHook, isAbortRejection, abortResult, raceAbort, runWithRetryAfter } from './_utils'
 
 /**
  * Composable for optimistic updates with automatic rollback on error.
@@ -153,7 +153,11 @@ export function useOptimisticAction(
       retry: options.retry,
       signal: controller.signal,
     })
-    const fetchPromise = appFetch<ActionResult<unknown>>(path, fetchOptions)
+    const fetchPromise = runWithRetryAfter(
+      () => appFetch<ActionResult<unknown>>(path, fetchOptions),
+      options.retry,
+      controller.signal,
+    )
 
     try {
       const result = await raceAbort(fetchPromise, controller.signal)

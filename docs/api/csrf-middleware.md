@@ -131,6 +131,10 @@ const secureAction = createActionClient()
 
 ---
 
+::: warning Mutations behind a GET route
+`originMiddleware` and `csrfMiddleware` check the request's method, and only mutations are checked. When `callAction` runs an action from a GET route or from server middleware, the action's middleware sees that outer request, so a mutation reached that way is not protected. Expose a mutation only through a POST, PUT, PATCH, or DELETE route.
+:::
+
 ## Auto-Import
 
 `csrfMiddleware` is auto-imported in the `server/` directory when the module is installed.

@@ -279,9 +279,9 @@ You do not need to write any `import` statements for the module's utilities.
 - `prefetchAction` -- Pre-warm cache for action queries
 - `invalidateActions` / `clearActionCache` -- Cache management utilities
 
-## Example Repository
+## Example App
 
-Want to see a complete working application? The **[nuxt-actions-example](https://github.com/billymaulana/nuxt-actions-example)** repository includes these pages, and each one has a walkthrough in [Examples](/examples/):
+Want to see a complete working application? The **[example app](https://github.com/billymaulana/nuxt-actions/tree/main/example)** in the nuxt-actions repository includes these pages, and each one has a walkthrough in [Examples](/examples/):
 
 | Page | Feature | Composable |
 |------|---------|------------|
@@ -293,7 +293,7 @@ Want to see a complete working application? The **[nuxt-actions-example](https:/
 | [`/auth`](/examples/auth) | Auth preset on the builder | `createActionClient` |
 | [`/resilience`](/examples/resilience) | Error codes + retry | `createActionError` |
 
-You can also try it instantly in the browser: **[Open in StackBlitz](https://stackblitz.com/github/billymaulana/nuxt-actions-example)**
+You can also try it instantly in the browser: **[Open the live demo](https://nuxt-actions-demo.vercel.app)**
 
 ## Next Steps
 

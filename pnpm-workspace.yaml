@@ -1,5 +1,8 @@
 packages:
   - playground
+  - example
+
+linkWorkspacePackages: true
 
 shamefullyHoist: true
 

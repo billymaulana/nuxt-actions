@@ -7,7 +7,7 @@ description: "Build infinite scroll and cursor pagination with useInfiniteAction
 `useInfiniteActionQuery` provides infinite scroll and cursor-based pagination with SSR support. The first page is fetched on the server, and subsequent pages are accumulated on the client.
 
 ::: tip Working example
-See infinite scroll in the [Infinite Scroll example](/examples/infinite) from the [example repository](https://github.com/billymaulana/nuxt-actions-example).
+See infinite scroll in the [Infinite Scroll example](/examples/infinite) in the [example app](https://github.com/billymaulana/nuxt-actions/tree/main/example).
 :::
 
 ## Basic Usage

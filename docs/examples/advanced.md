@@ -258,7 +258,7 @@ async function handleExecuteAsync() {
       <button :disabled="retryAction.isExecuting.value" @click="handleRetry">
         {{ retryAction.isExecuting.value ? 'Retrying...' : 'Call Flaky API' }}
       </button>
-      <div v-if="retryAction.hasSucceeded.value" class="success">
+      <div v-if="retryAction.hasSucceeded.value && retryAction.data.value" class="success">
         Success on attempt {{ retryAction.data.value.attempt }}:
         {{ retryAction.data.value.message }}
       </div>
@@ -285,13 +285,13 @@ async function handleExecuteAsync() {
       <button :disabled="dynamicHeaderAction.isExecuting.value" @click="handleDynamicHeaders">
         Dynamic Headers
       </button>
-      <div v-if="staticHeaderAction.hasSucceeded.value" class="success">
+      <div v-if="staticHeaderAction.hasSucceeded.value && staticHeaderAction.data.value" class="success">
         <strong>Static headers echoed:</strong>
         <pre>{{
           JSON.stringify(staticHeaderAction.data.value.receivedHeaders, null, 2)
         }}</pre>
       </div>
-      <div v-if="dynamicHeaderAction.hasSucceeded.value" class="success">
+      <div v-if="dynamicHeaderAction.hasSucceeded.value && dynamicHeaderAction.data.value" class="success">
         <strong>Dynamic headers echoed:</strong>
         <pre>{{
           JSON.stringify(dynamicHeaderAction.data.value.receivedHeaders, null, 2)

@@ -447,6 +447,10 @@ interface UseActionOptions<TInput, TOutput> {
   onSettled?: (result: ActionResult<TOutput>) => void
   /** Called immediately when execute() is invoked, before the request starts. */
   onExecute?: (input: TInput) => void
+  /** Track how much of the request body has been sent, in uploadProgress. Default: false */
+  uploadProgress?: boolean
+  /** Called as the request body is sent. Also turns on uploadProgress. */
+  onUploadProgress?: (progress: UploadProgress) => void
 }
 ```
 
@@ -474,10 +478,12 @@ interface UseActionReturn<TInput, TOutput> {
   hasSucceeded: ComputedRef<boolean>
   /** Computed: true when status is 'error'. */
   hasErrored: ComputedRef<boolean>
-  /** Reset data, error, and status to initial values. Aborts any in-flight request. */
   /** Abort the in-flight request without clearing state. */
   cancel: () => void
+  /** Reset data, error, status, and uploadProgress to initial values. Aborts any in-flight request. */
   reset: () => void
+  /** Progress of the latest upload, with the uploadProgress or onUploadProgress option. */
+  uploadProgress: Readonly<Ref<UploadProgress | null>>
 }
 ```
 
@@ -652,7 +658,7 @@ interface UseActionQueryReturn<TOutput> {
 
 ### UseFormActionOptions
 
-Configuration options for the `useFormAction()` composable. Extends `UseActionOptions` (excluding `onExecute`).
+Configuration options for the `useFormAction()` composable. Extends `UseActionOptions` without `onExecute`, `uploadProgress`, and `onUploadProgress`; a form action sends JSON and never uploads files.
 
 ```ts
 interface UseFormActionOptions<TInput, TOutput> {
@@ -728,6 +734,12 @@ interface RetryConfig {
   maxDelay?: number
   /** Randomize each delay within [50%, 100%] of the computed value. Default: false */
   jitter?: boolean
+  /**
+   * Wait as long as the server asks before retrying: the Retry-After header on
+   * HTTP errors and `retryAfter` on RATE_LIMIT results. A wait longer than
+   * `maxDelay` (30 seconds by default) is not retried. Default: false
+   */
+  respectRetryAfter?: boolean
 }
 ```
 
@@ -807,6 +819,111 @@ interface IdempotencyStore {
   set: (key: string, record: IdempotencyRecord, ttlMs: number) => Promise<void> | void
 }
 ```
+
+## Rate Limiting
+
+### RateLimitConfig / RateLimitStore / RateLimitHit
+
+```ts
+interface RateLimitConfig {
+  limit: number
+  window?: number
+  keyFn?: (event: ServerEvent) => string
+  message?: string
+  maxEntries?: number
+  store?: RateLimitStore
+  passOnStoreError?: boolean
+  headers?: boolean
+}
+
+interface RateLimitStore {
+  hit: (key: string, windowMs: number) => RateLimitHit | Promise<RateLimitHit>
+}
+
+interface RateLimitHit {
+  /** Requests counted in the current window, including this one */
+  count: number
+  /** When the current window ends, in epoch milliseconds */
+  resetAt: number
+}
+```
+
+See [rateLimitMiddleware](/api/rate-limit-middleware).
+
+## Origin Check
+
+### OriginConfig
+
+```ts
+interface OriginConfig {
+  allowedOrigins?: string[]
+  requireOrigin?: boolean
+  message?: string
+}
+```
+
+See [originMiddleware](/api/origin-middleware).
+
+## Action Cache
+
+### ActionCacheConfig / ActionCacheStore / ActionCacheEntry
+
+```ts
+interface ActionCacheConfig<TInput = unknown, TCtx = Record<string, unknown>> {
+  maxAge: number
+  swr?: boolean
+  staleMaxAge?: number
+  key?: (args: { input: TInput, ctx: TCtx, event: ServerEvent }) => string | undefined | Promise<string | undefined>
+}
+
+interface ActionCacheStore {
+  get: (key: string) => Promise<ActionCacheEntry | undefined> | ActionCacheEntry | undefined
+  set: (key: string, entry: ActionCacheEntry, ttlMs: number) => Promise<void> | void
+  delete: (key: string) => Promise<void> | void
+  clear: (prefix: string) => Promise<void> | void
+}
+
+interface ActionCacheEntry<T = unknown> {
+  value: T
+  staleAt: number
+}
+
+interface ActionCacheInvalidation {
+  key?: string
+  input?: unknown
+}
+```
+
+See [Caching](/guide/caching).
+
+## Upload Progress
+
+### UploadProgress
+
+```ts
+interface UploadProgress {
+  loaded: number
+  total: number | null
+  percent: number | null
+}
+```
+
+## Server Actions
+
+### ServerAction / ActionInputArgs
+
+```ts
+/** An action that callAction can run: the default export of a defineAction or createActionClient file. */
+interface ServerAction<TInput = unknown, TOutput = unknown> {
+  _run: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
+  _types: { readonly input: TInput, readonly output: TOutput }
+}
+
+/** The input argument: optional when the action accepts undefined. */
+type ActionInputArgs<TInput> = undefined extends TInput ? [input?: TInput] : [input: TInput]
+```
+
+See [callAction](/api/call-action).
 
 ## Global Hook Payloads
 

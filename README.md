@@ -20,8 +20,8 @@
 <p align="center">
   <a href="https://billymaulana.github.io/nuxt-actions/">Documentation</a> |
   <a href="https://billymaulana.github.io/nuxt-actions/guide/getting-started">Getting started</a> |
-  <a href="https://github.com/billymaulana/nuxt-actions-example">Examples</a> |
-  <a href="https://stackblitz.com/github/billymaulana/nuxt-actions-example">Open in StackBlitz</a> |
+  <a href="https://github.com/billymaulana/nuxt-actions/tree/main/example">Examples</a> |
+  <a href="https://nuxt-actions-demo.vercel.app">Live demo</a> |
   <a href="./CHANGELOG.md">Changelog</a>
 </p>
 
@@ -31,7 +31,7 @@ Nuxt server routes are flexible, but every endpoint repeats the same work: parse
 
 - **One definition, two sides.** Write the action once in `server/actions/`. The client imports a typed reference from `#actions`, so input and output types follow the server code with no manual generics.
 - **Any validation library.** Zod, Valibot, ArkType, or any [Standard Schema](https://standardschema.dev/) library, with field-level errors in one consistent shape.
-- **Built for production.** Middleware with typed context, retries, deduplication, optimistic updates, SSR queries, streaming, idempotency, rate limiting, and CSRF protection are part of the module, not something you assemble.
+- **Built for production.** Middleware with typed context, retries, deduplication, optimistic updates, SSR queries, streaming, a server cache, idempotency, rate limiting, and CSRF protection are part of the module, not something you assemble.
 
 ## Quick start
 
@@ -82,10 +82,10 @@ const { execute, data, error, isExecuting } = useAction(createTodo)
 
 | Area | Highlights |
 | --- | --- |
-| Server | [`defineAction`](https://billymaulana.github.io/nuxt-actions/guide/define-action), the [`createActionClient` builder](https://billymaulana.github.io/nuxt-actions/guide/builder-pattern), [middleware](https://billymaulana.github.io/nuxt-actions/guide/middleware) with typed context, [output validation](https://billymaulana.github.io/nuxt-actions/guide/output-validation), [streaming](https://billymaulana.github.io/nuxt-actions/guide/streaming), [file uploads](https://billymaulana.github.io/nuxt-actions/guide/file-uploads), [idempotency](https://billymaulana.github.io/nuxt-actions/guide/idempotency) |
-| Client | [`useAction`](https://billymaulana.github.io/nuxt-actions/guide/use-action), [SSR queries](https://billymaulana.github.io/nuxt-actions/guide/action-queries), [cache invalidation](https://billymaulana.github.io/nuxt-actions/guide/cache-invalidation), [optimistic updates](https://billymaulana.github.io/nuxt-actions/guide/optimistic-updates), [infinite queries](https://billymaulana.github.io/nuxt-actions/guide/infinite-queries), [form actions](https://billymaulana.github.io/nuxt-actions/guide/form-actions), [batch actions](https://billymaulana.github.io/nuxt-actions/guide/batch-actions) |
-| Production | Retry with backoff, request deduplication and cancellation, [rate limiting and CSRF](https://billymaulana.github.io/nuxt-actions/guide/security), an [auth preset](https://billymaulana.github.io/nuxt-actions/guide/auth), [global hooks](https://billymaulana.github.io/nuxt-actions/guide/observability) |
-| Tooling | [OpenAPI 3.1 and Swagger UI](https://billymaulana.github.io/nuxt-actions/guide/openapi), a Nuxt DevTools tab, [`npx nuxt-actions add`](https://billymaulana.github.io/nuxt-actions/guide/cli) scaffolding, type updates on save |
+| Server | [`defineAction`](https://billymaulana.github.io/nuxt-actions/guide/define-action), the [`createActionClient` builder](https://billymaulana.github.io/nuxt-actions/guide/builder-pattern), [middleware](https://billymaulana.github.io/nuxt-actions/guide/middleware) with typed context, [output validation](https://billymaulana.github.io/nuxt-actions/guide/output-validation), [streaming](https://billymaulana.github.io/nuxt-actions/guide/streaming), [file uploads](https://billymaulana.github.io/nuxt-actions/guide/file-uploads), [idempotency](https://billymaulana.github.io/nuxt-actions/guide/idempotency), a [server cache](https://billymaulana.github.io/nuxt-actions/guide/caching) for GET actions, [`callAction`](https://billymaulana.github.io/nuxt-actions/api/call-action) |
+| Client | [`useAction`](https://billymaulana.github.io/nuxt-actions/guide/use-action), [SSR queries](https://billymaulana.github.io/nuxt-actions/guide/action-queries), [cache invalidation](https://billymaulana.github.io/nuxt-actions/guide/cache-invalidation), [optimistic updates](https://billymaulana.github.io/nuxt-actions/guide/optimistic-updates), [infinite queries](https://billymaulana.github.io/nuxt-actions/guide/infinite-queries), [form actions](https://billymaulana.github.io/nuxt-actions/guide/form-actions), [batch actions](https://billymaulana.github.io/nuxt-actions/guide/batch-actions), [upload progress](https://billymaulana.github.io/nuxt-actions/guide/file-uploads#upload-progress) |
+| Production | Retry with backoff and `Retry-After`, request deduplication and cancellation, [rate limiting with shared stores, origin checks, and CSRF tokens](https://billymaulana.github.io/nuxt-actions/guide/security), an [auth preset](https://billymaulana.github.io/nuxt-actions/guide/auth), [global hooks](https://billymaulana.github.io/nuxt-actions/guide/observability) |
+| Tooling | [OpenAPI 3.1 and Swagger UI](https://billymaulana.github.io/nuxt-actions/guide/openapi), a Nuxt DevTools tab, [`npx nuxt-actions add`](https://billymaulana.github.io/nuxt-actions/guide/cli) scaffolding, type updates on save, [unit tests with plain Vitest](https://billymaulana.github.io/nuxt-actions/guide/testing) |
 
 ## Compatibility
 

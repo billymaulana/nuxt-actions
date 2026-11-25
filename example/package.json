@@ -1,0 +1,27 @@
+{
+  "name": "nuxt-actions-example",
+  "private": true,
+  "type": "module",
+  "description": "Real-world examples and integration tests for nuxt-actions",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "dependencies": {
+    "nuxt": "^4.7.0",
+    "nuxt-actions": "^1.5.0",
+    "vue": "^3.5.46",
+    "vue-router": "^5.5.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@nuxt/test-utils": "^4.4.0",
+    "@vue/test-utils": "^2.6.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.1"
+  }
+}

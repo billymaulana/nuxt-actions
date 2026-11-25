@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { withBase } from 'vitepress'
+import { DEMO_ORIGIN } from '../../examples'
 import InstallCommand from './InstallCommand.vue'
 </script>
 
@@ -25,8 +26,8 @@ import InstallCommand from './InstallCommand.vue'
       >Read the guide</a>
       <a
         class="pill pill-ghost"
-        href="https://stackblitz.com/github/billymaulana/nuxt-actions-example"
-      >Open in StackBlitz</a>
+        :href="DEMO_ORIGIN"
+      >Try the live demo</a>
     </div>
     <InstallCommand />
   </section>

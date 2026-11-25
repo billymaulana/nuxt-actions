@@ -1,3 +1,4 @@
+import { setHeader as setH3Header } from 'h3'
 import type { H3Event } from 'h3'
 
 export type ServerEvent = H3Event
@@ -10,12 +11,16 @@ export {
   getCookie,
   getHeader,
   getQuery,
+  getRequestHost,
   getRequestIP,
   readBody,
   readMultipartFormData,
   setCookie,
-  setHeader,
 } from 'h3'
+
+export function setHeader(event: ServerEvent, name: string, value: string): void {
+  setH3Header(event, name, value)
+}
 
 export function getRequestMethod(event: ServerEvent): string {
   return event.method

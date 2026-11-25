@@ -7,7 +7,7 @@ description: "Stream responses from server to client over Server-Sent Events wit
 Stream data from server to client in real-time using Server-Sent Events (SSE). Ideal for AI responses, progress updates, and live data feeds.
 
 ::: tip Live Example
-See streaming in action in the [Streaming example](/examples/streaming), or run `pnpm dev` in the [example repository](https://github.com/billymaulana/nuxt-actions-example) and visit `/streaming`.
+See streaming in action in the [Streaming example](/examples/streaming), or run the [example app](https://github.com/billymaulana/nuxt-actions/tree/main/example) locally and visit `/streaming`.
 :::
 
 ## How It Works

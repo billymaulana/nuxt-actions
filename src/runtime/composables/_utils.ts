@@ -1,4 +1,4 @@
-import type { RetryConfig } from '../types'
+import type { ActionResult, RetryConfig } from '../types'
 
 // ── Serialization helpers ─────────────────────────────────────────
 
@@ -125,6 +125,86 @@ function needsDynamicRetryDelay(config: RetryConfig): boolean {
 
 // ── Abort & timeout helpers ───────────────────────────────────────
 
+const DEFAULT_RETRY_STATUS_CODES = [408, 409, 425, 429, 500, 502, 503, 504]
+const DEFAULT_RETRY_AFTER_LIMIT = 30_000
+
+/**
+ * Milliseconds to wait from a Retry-After header, given as delay seconds or an
+ * HTTP date. Returns undefined for a missing or malformed value.
+ */
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  const text = value?.trim()
+  if (!text) return undefined
+  if (/^\d+$/.test(text)) return Number(text) * 1000
+  if (!/[a-z]/i.test(text)) return undefined
+  const at = Date.parse(text)
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now)
+}
+
+/** Resolves after `ms`, or rejects with the abort reason as soon as `signal` aborts. */
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason)
+      return
+    }
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal!.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+/**
+ * Runs `request` and, with `respectRetryAfter`, retries rate limited and
+ * retryable outcomes itself: a RATE_LIMIT result waits its `retryAfter`, and an
+ * HTTP error with a retryable status waits its Retry-After header or the
+ * configured backoff. A wait longer than `maxDelay` (30 seconds by default)
+ * is not retried. Without the option the request runs once, unchanged.
+ */
+export function runWithRetryAfter<T>(
+  request: () => Promise<ActionResult<T>>,
+  retry: boolean | number | RetryConfig | undefined,
+  signal: AbortSignal,
+): Promise<ActionResult<T>> {
+  if (typeof retry !== 'object' || !retry.respectRetryAfter) return request()
+  return retryWithRetryAfter(request, retry, signal)
+}
+
+async function retryWithRetryAfter<T>(
+  request: () => Promise<ActionResult<T>>,
+  retry: RetryConfig,
+  signal: AbortSignal,
+): Promise<ActionResult<T>> {
+  const retries = retry.count ?? 3
+  const limit = retry.maxDelay ?? DEFAULT_RETRY_AFTER_LIMIT
+  const statusCodes = retry.statusCodes ?? DEFAULT_RETRY_STATUS_CODES
+
+  for (let attempt = 1; ; attempt++) {
+    let wait: number
+    try {
+      const result = await request()
+      if (result.success || result.error.code !== 'RATE_LIMIT' || typeof result.error.retryAfter !== 'number') return result
+      wait = result.error.retryAfter * 1000
+      if (attempt > retries || wait > limit) return result
+    }
+    catch (error) {
+      if (isAbortRejection(error, signal)) throw error
+      const response = (error as { response?: Response }).response
+      if (attempt > retries || !statusCodes.includes(response?.status ?? 500)) throw error
+      const advertised = parseRetryAfter(response?.headers.get('retry-after'))
+      if (advertised !== undefined && advertised > limit) throw error
+      wait = advertised ?? computeRetryDelay(retry, attempt)
+    }
+    await sleep(wait, signal)
+  }
+}
+
 /** The settled result every aborted execute() resolves with. */
 export function abortResult(): { success: false, error: { code: string, message: string, statusCode: number } } {
   return { success: false, error: { code: 'ABORT_ERROR', message: 'Request was aborted', statusCode: 0 } }
@@ -226,7 +306,10 @@ export function buildFetchOptions(opts: FetchOptionInputs): Record<string, unkno
 
   // Retry
   const retryCount = resolveRetryCount(opts.retry)
-  if (retryCount !== false) {
+  if (typeof opts.retry === 'object' && opts.retry.respectRetryAfter) {
+    fetchOptions.retry = 0
+  }
+  else if (retryCount !== false) {
     fetchOptions.retry = retryCount
     const retryConfig = typeof opts.retry === 'object' ? opts.retry : undefined
     if (retryConfig && needsDynamicRetryDelay(retryConfig)) {

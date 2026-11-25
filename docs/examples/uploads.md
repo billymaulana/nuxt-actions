@@ -1,11 +1,11 @@
 ---
 title: File Uploads
-description: Upload an avatar as FormData. nuxt-actions parses the multipart body into typed fields, so the handler reads the file and the label together.
+description: Upload an avatar as FormData with a progress bar. nuxt-actions parses the multipart body into typed fields, so the handler reads the file and the label together.
 ---
 
 # File Uploads
 
-Pass a `FormData` to `execute()` and the request goes out as `multipart/form-data`. On the server, nuxt-actions turns each file part into a `{ filename, type, data }` object and leaves text parts as strings, then validates the whole object with your schema. The handler gets the file and the other fields together, without parsing the body by hand.
+Pass a `FormData` to `execute()` and the request goes out as `multipart/form-data`. On the server, nuxt-actions turns each file part into a `{ filename, type, data }` object and leaves text parts as strings, then validates the whole object with your schema. The handler gets the file and the other fields together, without parsing the body by hand. With `uploadProgress: true`, the page shows how much of the file has been sent.
 
 <ExampleSource page="pages/uploads.vue" />
 
@@ -56,7 +56,7 @@ const file = ref<File | null>(null)
 const preview = ref<string | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
-const uploadAction = useAction(uploadAvatar)
+const uploadAction = useAction(uploadAvatar, { uploadProgress: true })
 
 function onFileChange(event: Event) {
   const target = event.target as HTMLInputElement
@@ -90,6 +90,10 @@ async function handleUpload() {
         <button type="submit" :disabled="uploadAction.isExecuting.value || !file">
           {{ uploadAction.isExecuting.value ? 'Uploading…' : 'Upload' }}
         </button>
+        <div v-if="uploadAction.uploadProgress.value">
+          <progress :value="uploadAction.uploadProgress.value.percent ?? undefined" max="100" />
+          {{ uploadAction.uploadProgress.value.percent ?? 0 }}% sent
+        </div>
       </form>
 
       <div v-if="uploadAction.error.value" class="error">
@@ -115,6 +119,7 @@ The markup is trimmed for readability. The full page is linked above.
 - The schema checks `label` and accepts any value for `avatar`. The handler narrows `avatar` to the parsed file shape and rejects the request with `NO_FILE` and status 400 when no file arrived.
 - `file.data` holds the file's bytes, so `data.length` is its size in bytes.
 - `URL.createObjectURL` shows a preview before anything is uploaded, and the label defaults to the file name.
+- `uploadProgress: true` sends the request through `XMLHttpRequest` in the browser, which reports how much of the body has been sent. `percent` is `null` until the size is known, which leaves the `<progress>` bar indeterminate. A small image on a fast connection finishes at once; throttle the network in the browser's developer tools to watch it move.
 
 ## Related
 

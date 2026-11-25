@@ -4,6 +4,7 @@ import { rateLimitMiddleware } from '../../src/runtime/server/utils/rateLimitMid
 
 vi.mock('h3', () => ({
   getRequestIP: vi.fn(),
+  setHeader: vi.fn(),
 }))
 
 function middlewareArgs(event: unknown = {}) {

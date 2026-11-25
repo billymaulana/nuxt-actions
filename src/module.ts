@@ -181,7 +181,7 @@ function generateHandlerCode(action: ScannedAction, defineActionPath: string): s
     `    }`,
     `    throw error`,
     `  }`,
-    `  return actionModule._execute(rawInput, event)`,
+    `  return actionModule._execute(rawInput, event, { path: ${JSON.stringify(action.path)} })`,
     `})`,
   ].join('\n')
 }

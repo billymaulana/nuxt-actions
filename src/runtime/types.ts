@@ -73,6 +73,7 @@ export type ActionErrorCode
     | 'PARSE_ERROR'
     | 'UNAUTHORIZED'
     | 'RATE_LIMIT'
+    | 'RATE_LIMIT_STORE_ERROR'
     | 'CSRF_ERROR'
     | 'IDEMPOTENCY_KEY_REQUIRED'
     | 'IDEMPOTENCY_KEY_REUSE'
@@ -90,6 +91,8 @@ export interface ActionError {
   message: string
   fieldErrors?: Record<string, string[]>
   statusCode: number
+  /** Seconds to wait before retrying, set on RATE_LIMIT errors */
+  retryAfter?: number
 }
 
 export type ActionResult<TOutput>
@@ -141,6 +144,8 @@ export interface ActionOptions<
   metadata?: ActionMetadata
   /** Replay protection keyed by the Idempotency-Key header. */
   idempotency?: IdempotencyConfig
+  /** Cache successful results of GET and HEAD requests on the server. */
+  cache?: ActionCacheConfig<InferOutput<TInputSchema>, TCtx>
   handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>
 }
 
@@ -165,20 +170,27 @@ export interface AuthMiddlewareOptions {
  */
 export type BuiltAction<TInput, TOutput>
   = ReturnType<typeof import('./server/internal/server-runtime')['defineEventHandler']> & {
-    _execute: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
+    _execute: (rawInput: unknown, event: ServerEvent, route?: { path: string }) => Promise<ActionResult<TOutput>>
+    _run: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
     _types: { readonly input: TInput, readonly output: TOutput }
   }
 
 export interface ActionClient<TCtx = Record<string, unknown>> {
-  use: <TNewCtx extends Record<string, unknown>>(
-    middleware: ActionMiddleware<TCtx, TNewCtx>,
-  ) => ActionClient<TCtx & TNewCtx>
+  use: {
+    <TNewCtx extends Record<string, unknown>>(
+      middleware: ActionMiddleware<TCtx, TNewCtx>,
+    ): ActionClient<TCtx & TNewCtx>
+    /** A middleware that adds no typed context, such as the built-in ones, keeps the context collected so far. */
+    (middleware: ActionMiddleware): ActionClient<TCtx>
+  }
   schema: <TInputSchema extends StandardSchemaV1>(
     inputSchema: TInputSchema,
   ) => ActionClientWithSchema<TCtx, TInputSchema>
   metadata: (meta: ActionMetadata) => ActionClient<TCtx>
   /** Enable Idempotency-Key replay protection for actions built from this client. */
   idempotency: (config?: IdempotencyConfig) => ActionClient<TCtx>
+  /** Cache successful results of GET and HEAD requests on the server. */
+  cache: (config: ActionCacheConfig<unknown, TCtx>) => ActionClient<TCtx>
   action: <TOutput>(
     handler: ActionHandler<unknown, TOutput, TCtx>,
   ) => BuiltAction<unknown, TOutput>
@@ -191,6 +203,8 @@ export interface ActionClientWithSchema<TCtx, TInputSchema extends StandardSchem
   metadata: (meta: ActionMetadata) => ActionClientWithSchema<TCtx, TInputSchema>
   /** Enable Idempotency-Key replay protection for actions built from this client. */
   idempotency: (config?: IdempotencyConfig) => ActionClientWithSchema<TCtx, TInputSchema>
+  /** Cache successful results of GET and HEAD requests on the server. */
+  cache: (config: ActionCacheConfig<InferOutput<TInputSchema>, TCtx>) => ActionClientWithSchema<TCtx, TInputSchema>
   action: <TOutput>(
     handler: ActionHandler<InferOutput<TInputSchema>, TOutput, TCtx>,
   ) => BuiltAction<InferInput<TInputSchema>, TOutput>
@@ -213,7 +227,14 @@ export type InferActionOutput<T>
 // ── defineAction Return (with phantom types) ─────────────────────
 
 export interface TypedActionHandler<TInput = unknown, TOutput = unknown> {
-  _execute: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
+  _execute: (rawInput: unknown, event: ServerEvent, route?: { path: string }) => Promise<ActionResult<TOutput>>
+  _run: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
+  _types: { readonly input: TInput, readonly output: TOutput }
+}
+
+/** An action that callAction can run: the default export of a defineAction or createActionClient file. */
+export interface ServerAction<TInput = unknown, TOutput = unknown> {
+  _run: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
   _types: { readonly input: TInput, readonly output: TOutput }
 }
 
@@ -239,7 +260,16 @@ export interface RetryConfig {
    * thundering-herd retries. Default: false
    */
   jitter?: boolean
+  /**
+   * Wait as long as the server asks before retrying: the Retry-After header on
+   * HTTP errors and `retryAfter` on RATE_LIMIT results. A wait longer than
+   * `maxDelay` (30 seconds by default) is not retried. Default: false
+   */
+  respectRetryAfter?: boolean
 }
+
+/** Arguments of an execute call: the input is optional when the action accepts no input. */
+export type ActionInputArgs<TInput> = undefined extends TInput ? [input?: TInput] : [input: TInput]
 
 // ── useAction Options ─────────────────────────────────────────────
 
@@ -268,11 +298,28 @@ export interface UseActionOptions<TInput, TOutput> {
   onError?: (error: ActionError) => void
   onSettled?: (result: ActionResult<TOutput>) => void
   onExecute?: (input: TInput) => void
+  /**
+   * Track how much of the request body has been sent, in `uploadProgress`.
+   * In the browser the request then goes through XMLHttpRequest, which can
+   * report it; on the server it is sent as usual. Default: false
+   */
+  uploadProgress?: boolean
+  /** Called as the request body is sent. Also turns on `uploadProgress`. */
+  onUploadProgress?: (progress: UploadProgress) => void
+}
+
+export interface UploadProgress {
+  /** Bytes sent so far. */
+  loaded: number
+  /** Size of the body in bytes, or null when it is not known. */
+  total: number | null
+  /** Whole-number percentage sent, or null when the size is not known. */
+  percent: number | null
 }
 
 export interface UseActionReturn<TInput, TOutput> {
-  execute: (input: TInput) => Promise<ActionResult<TOutput>>
-  executeAsync: (input: TInput) => Promise<TOutput>
+  execute: (...args: ActionInputArgs<TInput>) => Promise<ActionResult<TOutput>>
+  executeAsync: (...args: ActionInputArgs<TInput>) => Promise<TOutput>
   data: Readonly<Ref<TOutput | null>>
   error: Readonly<Ref<ActionError | null>>
   status: Readonly<Ref<ActionStatus>>
@@ -283,6 +330,8 @@ export interface UseActionReturn<TInput, TOutput> {
   /** Abort the in-flight request without clearing data/error state. */
   cancel: () => void
   reset: () => void
+  /** Progress of the latest upload, with the uploadProgress or onUploadProgress option. Null until one starts. */
+  uploadProgress: Readonly<Ref<UploadProgress | null>>
 }
 
 export interface UseActionMutationOptions<TInput, TOutput>
@@ -321,7 +370,7 @@ export interface UseOptimisticActionOptions<TInput, TOutput, TData = TOutput> {
 }
 
 export interface UseOptimisticActionReturn<TInput, TOutput, TData = TOutput> {
-  execute: (input: TInput) => Promise<ActionResult<TOutput>>
+  execute: (...args: ActionInputArgs<TInput>) => Promise<ActionResult<TOutput>>
   optimisticData: Readonly<Ref<TData>>
   data: Readonly<Ref<TOutput | null>>
   error: Readonly<Ref<ActionError | null>>
@@ -337,7 +386,7 @@ export interface UseOptimisticActionReturn<TInput, TOutput, TData = TOutput> {
 
 // ── useActionQuery Options ────────────────────────────────────────
 
-export interface UseActionQueryOptions<TOutput = unknown> {
+export interface UseActionQueryOptions<TOutput = unknown, TData = TOutput> {
   /** Run on SSR. Default: true */
   server?: boolean
   /** Don't block navigation. Default: false */
@@ -345,7 +394,7 @@ export interface UseActionQueryOptions<TOutput = unknown> {
   /** Execute immediately. Default: true */
   immediate?: boolean
   /** Default value factory when data is null */
-  default?: () => TOutput
+  default?: () => TData
   /** Auto-refetch interval in milliseconds. false to disable. */
   refetchInterval?: number | false
   /** Refetch when the browser tab regains focus. Default: false */
@@ -354,8 +403,8 @@ export interface UseActionQueryOptions<TOutput = unknown> {
   refetchOnReconnect?: boolean
   /** Conditionally enable/disable fetching. Reactive refs supported. */
   enabled?: boolean | Ref<boolean> | ComputedRef<boolean>
-  /** Transform response data before storing in `data` computed */
-  transform?: (data: TOutput) => TOutput
+  /** Transform response data before storing in `data` computed. It may return a different shape. */
+  transform?: (data: TOutput) => TData
   /** Cache tags for group invalidation via invalidateTags() or a mutation's invalidates */
   tags?: string[]
 }
@@ -386,7 +435,7 @@ export interface UseStreamActionOptions<TChunk = unknown> {
 export type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
 export interface UseStreamActionReturn<TInput, TChunk> {
-  execute: (input: TInput) => Promise<void>
+  execute: (...args: ActionInputArgs<TInput>) => Promise<void>
   stop: () => void
   chunks: Readonly<Ref<TChunk[]>>
   data: Readonly<Ref<TChunk | null>>
@@ -396,7 +445,7 @@ export interface UseStreamActionReturn<TInput, TChunk> {
 
 // ── useFormAction Options ────────────────────────────────────────
 
-export interface UseFormActionOptions<TInput, TOutput> extends Omit<UseActionOptions<TInput, TOutput>, 'onExecute'> {
+export interface UseFormActionOptions<TInput, TOutput> extends Omit<UseActionOptions<TInput, TOutput>, 'onExecute' | 'uploadProgress' | 'onUploadProgress'> {
   /** Initial values for the form fields */
   initialValues: TInput
 }
@@ -491,11 +540,38 @@ export interface RateLimitConfig {
   /** Custom error message. Default: 'Too many requests' */
   message?: string
   /**
-   * Hard cap on tracked client keys. When exceeded, the oldest entries are
-   * evicted so a spoofed-key flood cannot grow the store without bound.
-   * Default: 100000
+   * Hard cap on tracked client keys in the default in-memory store. When
+   * exceeded, the oldest entries are evicted so a spoofed-key flood cannot
+   * grow the store without bound. Default: 100000
    */
   maxEntries?: number
+  /** Where request counts are kept. Default: an in-memory store per middleware instance */
+  store?: RateLimitStore
+  /** Let requests through instead of failing with RATE_LIMIT_STORE_ERROR (503) when the store throws. Default: false */
+  passOnStoreError?: boolean
+  /** Send RateLimit-Limit, RateLimit-Remaining, and RateLimit-Reset on every response. Default: false */
+  headers?: boolean
+}
+
+export interface OriginConfig {
+  /** Extra origins to trust, compared without case or a trailing slash, for example 'https://admin.example.com' */
+  allowedOrigins?: string[]
+  /** Reject mutations that carry neither Sec-Fetch-Site nor Origin. Default: false */
+  requireOrigin?: boolean
+  /** Error message. Default: 'Cross-origin request rejected' */
+  message?: string
+}
+
+export interface RateLimitHit {
+  /** Requests counted in the current window, including this one */
+  count: number
+  /** When the current window ends, in epoch milliseconds */
+  resetAt: number
+}
+
+export interface RateLimitStore {
+  /** Count one request for `key` in a fixed window of `windowMs` and return the window's totals. */
+  hit: (key: string, windowMs: number) => RateLimitHit | Promise<RateLimitHit>
 }
 
 // ── CSRF Middleware ──────────────────────────────────────────────
@@ -524,7 +600,7 @@ export interface UseStreamActionQueryOptions<TChunk = unknown> {
 }
 
 export interface UseStreamActionQueryReturn<TInput, TChunk> {
-  execute: (input: TInput) => Promise<void>
+  execute: (...args: ActionInputArgs<TInput>) => Promise<void>
   stop: () => void
   chunks: Readonly<Ref<TChunk[]>>
   data: Readonly<Ref<TChunk | null>>
@@ -603,4 +679,49 @@ export interface IdempotencyConfig {
   scope?: (event: ServerEvent) => string | Promise<string>
   /** Pluggable storage. Default: a per-process in-memory store with TTL pruning. */
   store?: IdempotencyStore
+}
+
+// ── Action Cache (defineAction option) ───────────────────────────
+
+export interface ActionCacheEntry<T = unknown> {
+  value: T
+  /** Epoch milliseconds after which the value is stale. */
+  staleAt: number
+}
+
+/**
+ * Storage for cached action results, replaced with setActionCacheStore.
+ * A store drops an entry once `ttlMs` has passed. When the store throws,
+ * the action runs as if nothing were cached.
+ */
+export interface ActionCacheStore {
+  get: (key: string) => Promise<ActionCacheEntry | undefined> | ActionCacheEntry | undefined
+  set: (key: string, entry: ActionCacheEntry, ttlMs: number) => Promise<void> | void
+  delete: (key: string) => Promise<void> | void
+  /** Remove every entry whose key starts with `prefix`. */
+  clear: (prefix: string) => Promise<void> | void
+}
+
+export interface ActionCacheConfig<TInput = unknown, TCtx = Record<string, unknown>> {
+  /** Seconds a result stays fresh. */
+  maxAge: number
+  /** Serve a stale result while a fresh one is computed in the background. Default: false */
+  swr?: boolean
+  /** Seconds a stale result may still be served when `swr` is on. Default: maxAge */
+  staleMaxAge?: number
+  /**
+   * Extra part of the cache key, such as the user id. A result that depends on
+   * who is asking must include it, or one user's result is served to another.
+   */
+  key?: (args: { input: TInput, ctx: TCtx, event: ServerEvent }) => string | undefined | Promise<string | undefined>
+}
+
+export interface ActionCacheInvalidation {
+  /** Only the results stored under this `key`. */
+  key?: string
+  /**
+   * Only the result for this input, as the handler received it after validation.
+   * Without `key`, this is the result stored without a key.
+   */
+  input?: unknown
 }

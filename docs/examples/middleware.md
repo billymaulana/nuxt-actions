@@ -159,7 +159,7 @@ const chainSkip = useAction(middlewareChainSkip)
         }}</pre>
       </div>
 
-      <div v-if="loginAction.hasSucceeded.value" class="success">
+      <div v-if="loginAction.hasSucceeded.value && loginAction.data.value" class="success">
         <p>Welcome, {{ loginAction.data.value.user.name }}!</p>
         <p>Token: {{ loginAction.data.value.token }}</p>
       </div>

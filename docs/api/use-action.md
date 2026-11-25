@@ -49,6 +49,8 @@ interface UseActionOptions<TInput, TOutput> {
   onError?: (error: ActionError) => void
   onSettled?: (result: ActionResult<TOutput>) => void
   onExecute?: (input: TInput) => void
+  uploadProgress?: boolean
+  onUploadProgress?: (progress: UploadProgress) => void
 }
 ```
 
@@ -84,10 +86,19 @@ interface RetryConfig {
   backoff?: 'fixed' | 'linear' | 'exponential' // Default: 'fixed'
   maxDelay?: number   // Cap for a single retry delay
   jitter?: boolean    // Randomize within [50%, 100%] of the delay
+  respectRetryAfter?: boolean // Wait as long as the server asks. Default: false
 }
 ```
 
 With `backoff: 'exponential'` the delay doubles per attempt (`delay * 2^(attempt-1)`); `'linear'` multiplies by the attempt number. `maxDelay` caps the result and `jitter` spreads concurrent retries to avoid thundering herds.
+
+With `respectRetryAfter: true`, a retry waits as long as the server asks: the `retryAfter` seconds of a `RATE_LIMIT` result, such as one from [rateLimitMiddleware](/api/rate-limit-middleware), or the `Retry-After` header of an HTTP error in `statusCodes`. A `RATE_LIMIT` result is retried only with this option. When the server asks for longer than `maxDelay` (30 seconds by default), the call is not retried and resolves with the error, so a long lockout does not hang the UI. An HTTP error without `Retry-After` falls back to `delay` and `backoff`. Only use it for actions that are safe to run twice: a handler that throws a `RATE_LIMIT` error after it already did some work runs again on the retry.
+
+```ts
+const { execute } = useAction(sendCode, {
+  retry: { count: 2, respectRetryAfter: true, maxDelay: 10_000 },
+})
+```
 
 ### `timeout`
 
@@ -170,6 +181,25 @@ const { execute, data } = useAction<void, Todo[]>('/api/todos', {
 - **Type:** `(error: ActionError) => void`
 - **Description:** Called when the server returns `{ success: false, error }` or when a network fetch error occurs. Receives the `ActionError` object.
 
+### `uploadProgress`
+
+- **Type:** `boolean`
+- **Default:** `false`
+- **Description:** Track how much of the request body has been sent, in the returned `uploadProgress` ref. In the browser the request then goes through `XMLHttpRequest`, which can report upload progress, while `$fetch` options such as `baseURL`, headers, retry, timeout, and abort still apply. On the server the request is sent as usual and `uploadProgress` stays `null`.
+
+### `onUploadProgress`
+
+- **Type:** `(progress: UploadProgress) => void`
+- **Description:** Called each time the browser reports upload progress. Also turns on `uploadProgress`.
+
+```ts
+interface UploadProgress {
+  loaded: number          // Bytes sent so far
+  total: number | null    // Size of the body, or null when it is not known
+  percent: number | null  // Whole-number percentage, or null when the size is not known
+}
+```
+
 ### `onSettled`
 
 - **Type:** `(result: ActionResult<TOutput>) => void`
@@ -192,8 +222,11 @@ interface UseActionReturn<TInput, TOutput> {
   hasErrored: ComputedRef<boolean>
   cancel: () => void
   reset: () => void
+  uploadProgress: Readonly<Ref<UploadProgress | null>>
 }
 ```
+
+For an action that takes no input, `execute()` and `executeAsync()` can be called without an argument.
 
 ### `execute(input)`
 
@@ -273,7 +306,12 @@ Aborts the in-flight request **without** clearing `data`, `error`, or other stat
 ### `reset()`
 
 - **Type:** `() => void`
-- **Description:** Reset all reactive state to initial values: `data` to `null`, `error` to `null`, `status` to `'idle'`. Also aborts any in-flight request.
+- **Description:** Reset all reactive state to initial values: `data` to `null`, `error` to `null`, `status` to `'idle'`, `uploadProgress` to `null`. Also aborts any in-flight request.
+
+### `uploadProgress`
+
+- **Type:** `Readonly<Ref<UploadProgress | null>>`
+- **Description:** Progress of the latest upload, with the `uploadProgress` or `onUploadProgress` option. `null` until an upload starts, `{ loaded: 0, total: null, percent: null }` when it starts, then updated as the browser sends the body. It keeps the last value after the call settles. See [File Uploads](/guide/file-uploads#upload-progress).
 
 ---
 

@@ -15,6 +15,7 @@ export {
   getCookie,
   getQuery,
   getRequestHeader as getHeader,
+  getRequestHost,
   getRequestIP,
   setCookie,
 } from 'nuxt/server'

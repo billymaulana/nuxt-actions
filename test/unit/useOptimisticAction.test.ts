@@ -488,6 +488,36 @@ describe('useOptimisticAction', () => {
     })
   })
 
+  describe('respectRetryAfter', () => {
+    it('keeps the optimistic update while it waits and settles on the retried result', async () => {
+      vi.useFakeTimers()
+      try {
+        const todos = ref<Todo[]>([{ id: 1, title: 'Buy milk', done: false }])
+        mockFetch
+          .mockResolvedValueOnce({ success: false, error: { code: 'RATE_LIMIT', message: 'Slow down', statusCode: 429, retryAfter: 1 } })
+          .mockResolvedValueOnce({ success: true, data: [{ id: 1, title: 'Buy milk', done: true }] })
+        const { execute, optimisticData, status } = useOptimisticAction<{ id: number }, Todo[]>('/api/todos/toggle', {
+          currentData: todos,
+          updateFn: (input, current) => current.map(t => t.id === input.id ? { ...t, done: true } : t),
+          retry: { count: 1, respectRetryAfter: true },
+        })
+
+        const running = execute({ id: 1 })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(status.value).toBe('executing')
+        expect(optimisticData.value).toEqual([{ id: 1, title: 'Buy milk', done: true }])
+        await vi.advanceTimersByTimeAsync(1000)
+        await running
+
+        expect(mockFetch).toHaveBeenCalledTimes(2)
+        expect(status.value).toBe('success')
+      }
+      finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
   describe('callbacks', () => {
     it('calls onExecute before fetch with input', async () => {
       const callOrder: string[] = []

@@ -90,7 +90,7 @@ async function handleList() {
         }}</pre>
       </div>
 
-      <div v-if="createAction.hasSucceeded.value" class="success">
+      <div v-if="createAction.hasSucceeded.value && createAction.data.value" class="success">
         Created: {{ createAction.data.value.title }} (id: {{ createAction.data.value.id }})
       </div>
     </section>

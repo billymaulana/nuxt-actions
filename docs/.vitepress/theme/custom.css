@@ -1288,16 +1288,41 @@ html.dark:has(.VPLocalSearchBox) {
 }
 
 .example-source {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 20px;
   margin: 24px 0 8px;
   padding: 14px 16px 14px 18px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 14px;
   background: var(--vp-c-bg-soft);
+}
+
+.example-source-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.example-source-demo {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: #0a0a0a;
+}
+
+.example-source-demo iframe {
+  display: block;
+  width: 100%;
+  height: min(640px, 75vh);
+  border: 0;
+}
+
+.vp-doc .example-source-note {
+  margin: 12px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
 }
 
 .example-source-file {
@@ -1336,10 +1361,12 @@ html.dark:has(.VPLocalSearchBox) {
   border: 1px solid var(--vp-c-border);
   border-radius: 999px;
   font-size: 13.5px;
+  font-family: inherit;
   font-weight: 550;
   text-decoration: none;
   color: var(--vp-c-text-1);
   background: var(--vp-c-bg);
+  cursor: pointer;
   transition: border-color 0.2s, color 0.2s;
 }
 

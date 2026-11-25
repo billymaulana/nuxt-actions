@@ -13,16 +13,16 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: pnpm
           registry-url: https://registry.npmjs.org/
 
@@ -41,6 +41,11 @@ jobs:
       - name: Build
         run: pnpm run prepack
 
+      - name: Extract release notes from the changelog
+        run: |
+          awk -v heading="## ${GITHUB_REF_NAME} " 'index($0, heading) == 1 { found = 1; next } found && /^## v/ { exit } found { print }' CHANGELOG.md > release-notes.md
+          test -n "$(tr -d '[:space:]' < release-notes.md)"
+
       - name: Update npm for OIDC support
         run: npm install -g npm@latest
 
@@ -50,4 +55,4 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
+          body_path: release-notes.md

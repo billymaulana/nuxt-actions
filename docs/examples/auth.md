@@ -50,7 +50,7 @@ import { account as accountAction } from '#actions'
 const signedIn = ref(false)
 
 const account = useAction(accountAction, {
-  headers: () => (signedIn.value ? { 'x-demo-session': 'u_42' } : {}),
+  headers: (): Record<string, string> => (signedIn.value ? { 'x-demo-session': 'u_42' } : {}),
 })
 </script>
 

@@ -135,7 +135,7 @@ Because the boundary is plain HTTP, every action also works with `curl`, Postman
 | Actively maintained | :white_check_mark: | :white_check_mark: | :x: 30+ issues | :x: |
 
 ::: tip See it in action
-Browse the [examples](/examples/) for real-world usage with CRUD, streaming, optimistic updates, middleware, and more, or clone the [example repository](https://github.com/billymaulana/nuxt-actions-example).
+Browse the [examples](/examples/) for real-world usage with CRUD, streaming, optimistic updates, middleware, and more, or run the [example app](https://github.com/billymaulana/nuxt-actions/tree/main/example) from the repository.
 :::
 
 ### vs trpc-nuxt
