@@ -55,7 +55,7 @@
   "bin": {
     "nuxt-actions": "./bin/nuxt-actions.mjs"
   },
-  "packageManager": "pnpm@10.27.0",
+  "packageManager": "pnpm@12.23.0",
   "scripts": {
     "prepack": "nuxt-module-build build",
     "dev": "npm run dev:prepare && nuxt dev playground",
@@ -63,8 +63,10 @@
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxt prepare playground",
     "release": "npm run lint && npm run test && npm run prepack && changelogen --release && npm publish && git push --follow-tags",
     "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest watch",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "vitest run test/unit/",
+    "test:e2e": "vitest run --config vitest.config.e2e.ts",
+    "test:watch": "vitest watch test/unit/",
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit",
     "test:type-tests": "vitest run --config vitest.config.typecheck.ts",
     "test:coverage": "vitest run test/unit/ --coverage",
@@ -73,7 +75,8 @@
     "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
-    "@nuxt/kit": "^3.7.0 || ^4.0.0"
+    "@nuxt/kit": "^3.7.0 || ^4.0.0",
+    "destr": "^2.0.5"
   },
   "peerDependencies": {
     "arktype": ">=2.1.0",
@@ -91,28 +94,30 @@
       "optional": true
     }
   },
-  "pnpm": {
-    "overrides": {
-      "vitepress>vite": "^6.4.2"
-    }
-  },
   "devDependencies": {
-    "@nuxt/devtools": "^3.2.4",
-    "@nuxt/eslint-config": "^1.15.2",
-    "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/schema": "^4.4.8",
-    "@nuxt/test-utils": "^4.0.3",
-    "@types/node": "latest",
-    "@vitest/coverage-v8": "^4.1.8",
-    "arktype": "^2.2.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource-variable/onest": "^5.3.1",
+    "@nuxt/devtools": "^4.2.0",
+    "@nuxt/eslint-config": "^1.17.0",
+    "@nuxt/module-builder": "^1.0.4",
+    "@nuxt/schema": "^4.7.0",
+    "@nuxt/test-utils": "^4.4.0",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^5.1.1",
+    "arktype": "^2.2.10",
     "changelogen": "^0.6.2",
-    "eslint": "^10.4.1",
-    "nuxt": "^4.4.8",
+    "eslint": "^10.15.0",
+    "h3": "^1.15.11",
+    "nitro": "3.0.261103-rc",
+    "nitropack": "^2.14.0",
+    "nuxt": "^4.7.0",
     "typescript": "~5.9.3",
-    "valibot": "^1.4.1",
+    "valibot": "^1.5.0",
     "vitepress": "^1.6.4",
-    "vitest": "^4.1.8",
-    "vue-tsc": "^3.3.4",
-    "zod": "^4.4.3"
+    "vitest": "^5.1.1",
+    "vue": "^3.5.46",
+    "vue-tsc": "^3.3.14",
+    "zod": "^4.6.7"
   }
 }
