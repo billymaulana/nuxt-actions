@@ -64,39 +64,30 @@ The `stream` object provides:
 | `stream.send(data)` | Send a data chunk to the client. Can be called multiple times. |
 | `stream.close()` | Signal completion and close the SSE connection. |
 
-### Real-World: AI Chat with OpenAI
+### Real-World: Streaming From a Text Source
 
 ```ts
-// server/actions/ai-complete.post.ts
+// server/actions/summarize.post.ts
 import { z } from 'zod'
-import OpenAI from 'openai'
-
-const openai = new OpenAI()
 
 export default defineStreamAction({
   input: z.object({
-    prompt: z.string().min(1).max(2000),
-    model: z.enum(['gpt-4o', 'gpt-4o-mini']).default('gpt-4o-mini'),
+    documentId: z.string(),
   }),
   middleware: [authMiddleware],
-  handler: async ({ input, ctx, stream }) => {
-    const completion = await openai.chat.completions.create({
-      model: input.model,
-      messages: [{ role: 'user', content: input.prompt }],
-      stream: true,
-    })
+  handler: async ({ input, stream }) => {
+    const document = await db.documents.find(input.documentId)
 
-    for await (const chunk of completion) {
-      const text = chunk.choices[0]?.delta?.content
-      if (text) {
-        await stream.send({ text })
-      }
+    for await (const text of summarize(document, { signal: stream.signal })) {
+      await stream.send({ text })
     }
 
     await stream.close()
   },
 })
 ```
+
+`summarize` stands for any source that yields text in pieces, such as a text generation SDK or a large file read line by line. Passing `stream.signal` stops it when the client calls `stop()` or disconnects.
 
 ### Real-World: File Processing Progress
 
