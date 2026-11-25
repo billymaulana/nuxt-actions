@@ -1,3 +1,7 @@
+---
+description: "Use any validation library that implements Standard Schema, including Zod, Valibot, and ArkType, with one consistent error format."
+---
+
 # Standard Schema
 
 `nuxt-actions` does not depend on any specific validation library. Instead, it accepts any library that implements the [Standard Schema](https://standardschema.dev/) specification -- a vendor-agnostic interface that lets validation libraries describe themselves in a uniform way.
@@ -90,10 +94,7 @@ All three examples produce the same runtime behavior: the input is validated bef
 
 When you pass a schema to `defineAction`, the module calls `schema['~standard'].validate(rawInput)` at runtime. If the result contains `issues`, a `VALIDATION_ERROR` response is returned with field-level error messages. If validation passes, the validated `value` is forwarded to your handler.
 
-```
-Request body ──> ~standard.validate() ──> issues? ──> 422 VALIDATION_ERROR
-                                     └──> value  ──> handler({ input: value })
-```
+<FlowSteps :rows="[{ label: 'Invalid input', steps: ['Request body', '~standard.validate()', 'issues', '422 VALIDATION_ERROR'] }, { label: 'Valid input', steps: ['Request body', '~standard.validate()', 'value', 'handler({ input: value })'] }]" />
 
 Because the module reads the `~standard` interface at runtime, no build-time plugin, adapter, or code generation is required. Add a new schema library to your project and it works immediately.
 

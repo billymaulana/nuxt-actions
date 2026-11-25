@@ -1,3 +1,7 @@
+---
+description: "API reference for defineStreamAction: stream typed chunks over Server-Sent Events, with validation, middleware, and disconnect detection."
+---
+
 # defineStreamAction()
 
 Create a streaming server action that sends data via Server-Sent Events (SSE). Returns an H3 event handler with a `_isStream` marker for the module's type generation.
@@ -39,7 +43,7 @@ interface DefineStreamActionOptions<TInputSchema, TChunk, TCtx> {
   handleServerError?: (error: Error) => { code: string, message: string, statusCode?: number }
   handler: (params: {
     input: InferOutput<TInputSchema>
-    event: H3Event
+    event: ServerEvent
     ctx: TCtx
     stream: StreamActionSender<TChunk>
   }) => Promise<void>

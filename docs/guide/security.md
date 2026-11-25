@@ -1,3 +1,7 @@
+---
+description: "Secure server actions in production: CSRF tokens, authentication, input validation, rate limiting, error sanitization, and safe action file scanning."
+---
+
 # Security
 
 Best practices for securing your server actions in production.
@@ -25,7 +29,7 @@ csrfMiddleware({
 })
 ```
 
-On safe requests (GET, HEAD), a token is set as an httpOnly cookie. On mutation requests (POST, PUT, PATCH, DELETE), the middleware validates that the token in the request header matches the cookie value.
+On safe requests (GET, HEAD, OPTIONS), the middleware keeps the token already in the cookie or creates one, and sets it as a cookie that client code can read. On mutation requests (POST, PUT, PATCH, DELETE), it validates that the token in the request header matches the cookie value. Handlers receive the token as `ctx.csrfToken`.
 
 See the [csrfMiddleware API reference](/api/csrf-middleware) for full details.
 

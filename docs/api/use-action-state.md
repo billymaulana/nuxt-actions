@@ -1,3 +1,7 @@
+---
+description: "API reference for useActionState: progressive enhancement for HTML forms that turns FormData into typed action input."
+---
+
 # useActionState()
 
 Composable for progressive enhancement with HTML forms. Wraps `useAction` internally and provides a `formAction` handler that converts `FormData` to a plain object before executing.

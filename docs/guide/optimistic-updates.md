@@ -1,19 +1,20 @@
+---
+description: "Update the UI before the server answers with useOptimisticAction, then reconcile with the server result or roll back automatically on error."
+---
+
 # Optimistic Updates
 
 `useOptimisticAction` gives users instant visual feedback by updating the UI **before** the server responds. If the server confirms the change, the optimistic state is replaced with the server's authoritative data. If the server returns an error, the optimistic state is automatically rolled back to the snapshot taken before the update.
 
 ::: tip Working example
-Try optimistic updates live in the [example /optimistic page](https://github.com/billymaulana/nuxt-actions-example/blob/master/pages/optimistic.vue) -- toggle todos and see instant UI feedback with rollback.
+Try optimistic updates live in the [example /optimistic page](/examples/optimistic) -- toggle todos and see instant UI feedback with rollback.
 :::
 
 ## What Are Optimistic Updates?
 
 In a typical action flow, the user clicks a button, waits for the server to respond, and then sees the UI update. With optimistic updates, you flip the order: the UI updates immediately, and the server request happens in the background. This eliminates perceived latency for operations that almost always succeed, such as toggling a checkbox, liking a post, or reordering a list.
 
-```
-Standard flow:    click -> wait for server -> update UI
-Optimistic flow:  click -> update UI immediately -> server confirms (or rolls back)
-```
+<FlowSteps :rows="[{ label: 'Standard flow', steps: ['click', 'wait for server', 'update UI'] }, { label: 'Optimistic flow', steps: ['click', 'update UI immediately', 'server confirms or rolls back'] }]" />
 
 The tradeoff is that you must handle the rare case where the server rejects the change, which `useOptimisticAction` does automatically via rollback.
 
@@ -67,21 +68,12 @@ Notice that the template renders from `optimisticData`, not from `todos`. This i
 Here is the step-by-step lifecycle when `execute(input)` is called:
 
 1. **Snapshot** -- The current value of `optimisticData` is saved internally for potential rollback.
-2. **Optimistic update** -- `updateFn(input, currentData)` is called immediately. The return value becomes the new `optimisticData`.
+2. **Optimistic update** -- `updateFn(input, optimisticData)` is called immediately. The return value becomes the new `optimisticData`.
 3. **HTTP request** -- The request is sent to the server in the background.
-4. **On success** -- `optimisticData` is replaced with the server's response (the authoritative data).
+4. **On success** -- `optimisticData` is replaced with the server's response, or merged with it through [`reconcile`](#reconcile).
 5. **On error** -- `optimisticData` is rolled back to the snapshot from step 1.
 
-```
-execute(input)
-  |
-  +-- Save snapshot of optimisticData
-  +-- optimisticData = updateFn(input, currentData)  [instant]
-  +-- fetch(path, input)
-        |
-        +-- success: optimisticData = serverResponse
-        +-- error:   optimisticData = snapshot  [rollback]
-```
+<FlowSteps :rows="[{ label: 'Success', steps: ['execute(input)', 'snapshot', 'updateFn applies the change', 'request', 'server response or reconcile'] }, { label: 'Failure', steps: ['execute(input)', 'snapshot', 'updateFn applies the change', 'request', 'rollback to snapshot'] }]" />
 
 ## The currentData + updateFn Pattern
 
@@ -127,8 +119,24 @@ updateFn: (input, current) => {
 The function signature:
 
 ```ts
-updateFn: (input: TInput, currentData: TOutput) => TOutput
+updateFn: (input: TInput, current: TData) => TData
 ```
+
+### reconcile
+
+Use `reconcile` when the action returns something other than the whole state. Without it, a toggle that returns only the updated todo replaces the list in `optimisticData` with that single todo:
+
+```ts
+const { execute, optimisticData } = useOptimisticAction(toggleTodo, {
+  currentData: todos,
+  updateFn: (input, current) =>
+    current.map(t => t.id === input.id ? { ...t, done: input.done } : t),
+  reconcile: (todo, current) =>
+    current.map(t => t.id === todo.id ? { ...t, done: todo.done } : t),
+})
+```
+
+`reconcile` receives the server response and the latest optimistic state, and returns the next optimistic state. If `currentData` changed while the call was running, that state is `updateFn` applied again to the new `currentData`, so a refetch that lands mid-call is kept. When the action already returns the whole state, leave it out and the response replaces `optimisticData`.
 
 ## Return Values
 
@@ -209,16 +217,7 @@ const { execute } = useOptimisticAction('/api/todos/toggle', {
 
 ### Callback execution order
 
-```
-execute(input)
-  -> save snapshot
-  -> apply updateFn to optimisticData
-  -> onExecute(input)
-  -> fetch begins
-  -> ... server responds ...
-  -> onSuccess(data)  OR  onError(error)
-  -> onSettled(result)
-```
+<FlowSteps vertical :steps="['execute(input)', 'save snapshot', 'apply updateFn to optimisticData', 'onExecute(input)', 'fetch begins', { label: 'server responds' }, 'onSuccess(data) or onError(error)', 'onSettled(result)']" />
 
 ## Real-World Example: Todo Toggle
 
@@ -515,7 +514,7 @@ Since `optimisticData` may be rolled back, snapshotted, or compared, keep it as 
 
 ### Sync currentData in onSuccess
 
-When the server returns the authoritative state, update your `currentData` ref so that subsequent optimistic updates start from the correct baseline:
+When the server returns the authoritative state, update your `currentData` ref so that subsequent optimistic updates start from the correct baseline. `optimisticData` follows `currentData` whenever no call is running, so the synced value is what the template shows next:
 
 ```ts
 const todos = ref<Todo[]>([])

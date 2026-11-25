@@ -1,3 +1,7 @@
+---
+description: "API reference for defineMiddleware and createMiddleware: typed middleware that extends the action context or stops the request."
+---
+
 # defineMiddleware() / createMiddleware()
 
 Define a reusable, typed middleware function for use with `defineAction` or `createActionClient`. Middleware runs before the action handler and can augment the context, perform authorization checks, add logging, or throw errors to halt execution.
@@ -40,7 +44,7 @@ The middleware function receives a single object with three properties.
 
 ```ts
 type ActionMiddleware<TCtxIn, TCtxOut> = (context: {
-  event: H3Event
+  event: ServerEvent
   ctx: TCtxIn
   next: <TNewCtx extends Record<string, unknown>>(
     opts?: { ctx: TNewCtx }
@@ -50,8 +54,12 @@ type ActionMiddleware<TCtxIn, TCtxOut> = (context: {
 
 ### `event`
 
-- **Type:** `H3Event`
-- **Description:** The H3 request event. Provides access to headers, cookies, request metadata, and all H3 utilities.
+- **Type:** `ServerEvent`
+- **Description:** The request event of the server runtime: h3's `H3Event` on Nitro v2, the portable `RequestEvent` on Nitro v3. See [Server Runtimes](/guide/server-runtimes).
+
+::: tip Nitro v3
+`event.method` and `event.path` only exist on Nitro v2. For middleware that runs on both, read `event.req.method` and `getRequestURL(event)` from `nuxt/server`.
+:::
 
 ### `ctx`
 
@@ -92,14 +100,13 @@ export const rateLimitMiddleware = defineMiddleware(async ({ event, next }) => {
 
 ### Return Value
 
-`next()` returns `Promise<TNewCtx & TCtxIn>` -- the merged context after continuation. The middleware must return the result of `next()` (or a superset of the expected return type).
+`next()` returns `Promise<TNewCtx & TCtxIn>`, the merged context. It resolves as soon as the context is merged and before the handler runs, so code after `await next()` runs before the handler, not after it. The middleware must return the result of `next()` (or a superset of the expected return type).
 
 ```ts
-export const timingMiddleware = defineMiddleware(async ({ event, next }) => {
-  const start = Date.now()
-  const result = await next({ ctx: { requestId: crypto.randomUUID() } })
-  console.log(`[${Date.now() - start}ms] ${event.method} ${event.path}`)
-  return result
+export const requestIdMiddleware = defineMiddleware(async ({ event, next }) => {
+  const ctx = await next({ ctx: { requestId: crypto.randomUUID() } })
+  setResponseHeader(event, 'x-request-id', ctx.requestId)
+  return ctx
 })
 ```
 
@@ -212,20 +219,18 @@ export const adminMiddleware = defineMiddleware<
 // server/utils/middleware/logging.ts
 export const loggingMiddleware = defineMiddleware(async ({ event, next }) => {
   const requestId = crypto.randomUUID()
-  const start = Date.now()
-
-  const result = await next({ ctx: { requestId } })
 
   console.log(JSON.stringify({
     requestId,
     method: event.method,
     path: event.path,
-    duration: Date.now() - start,
   }))
 
-  return result
+  return next({ ctx: { requestId } })
 })
 ```
+
+To measure how long an action takes, time the work inside the handler. Middleware runs before the handler, and `next()` does not wait for it.
 
 ### Rate Limiting Middleware
 

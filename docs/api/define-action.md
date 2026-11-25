@@ -1,3 +1,7 @@
+---
+description: "API reference for defineAction: every option, the handler parameters, the result format, and how errors are returned to the client."
+---
+
 # defineAction()
 
 Create a type-safe server action with Standard Schema validation, middleware, and structured error handling. Returns an H3 event handler that can be used as a Nuxt API route.
@@ -164,7 +168,7 @@ export default defineAction({
 ```ts
 type ActionHandler<TInput, TOutput, TCtx> = (params: {
   input: TInput
-  event: H3Event
+  event: ServerEvent
   ctx: TCtx
 }) => TOutput | Promise<TOutput>
 ```
@@ -180,8 +184,8 @@ type ActionHandler<TInput, TOutput, TCtx> = (params: {
 
 ### `event`
 
-- **Type:** `H3Event` (from the `h3` package)
-- **Description:** The raw H3 event object. Provides access to headers, cookies, request metadata, and all H3 utilities (`getHeader`, `setCookie`, `getRequestIP`, etc.).
+- **Type:** `ServerEvent` (exported from `nuxt-actions/types`)
+- **Description:** The request event of the server runtime: h3's `H3Event` on Nitro v2, the portable `RequestEvent` on Nitro v3. Use it for headers, cookies, IP, and other request metadata. See [Server Runtimes](/guide/server-runtimes) for helpers that work on both.
 
 ### `ctx`
 
@@ -194,7 +198,7 @@ type ActionHandler<TInput, TOutput, TCtx> = (params: {
 
 1. **Parse input** -- For `GET`/`HEAD`, reads query parameters via `getQuery(event)`. For other methods, reads the JSON body via `readBody(event)`. Malformed JSON on a `content-type: application/json` request throws `PARSE_ERROR` (`statusCode: 400`).
 2. **Validate input** -- If `input` schema is provided, validates the parsed input against the Standard Schema `~standard.validate()` method. Failures return `VALIDATION_ERROR` (`statusCode: 422`) with `fieldErrors`.
-3. **Run middleware** -- Executes each middleware in array order. Each middleware should call `next()` exactly once. Context passed via `next({ ctx: { ... } })` is **deep-merged** into the existing context (nested objects are recursively merged, arrays are replaced). If a middleware does not call `next()`, a warning is logged in development to help detect accidental omissions.
+3. **Run middleware** -- Executes each middleware in array order. Each middleware should call `next()` exactly once. Context passed via `next({ ctx: { ... } })` is **deep-merged** into the existing context (nested objects are recursively merged, arrays are replaced). If a middleware returns without calling `next()`, the remaining middleware is skipped and the handler still runs. Throw an `ActionError` from middleware to stop the request.
 4. **Execute handler** -- Calls the handler with `{ input, event, ctx }`.
 5. **Validate output** -- If `outputSchema` is provided, validates the handler return value. Failures return `OUTPUT_VALIDATION_ERROR` (`statusCode: 500`).
 6. **Return result** -- On success, returns `{ success: true, data: TOutput }`.

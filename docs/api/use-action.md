@@ -1,3 +1,7 @@
+---
+description: "API reference for useAction: options, returned state, execute and executeAsync, retries, deduplication, timeouts, and cancel."
+---
+
 # useAction()
 
 A Vue composable for calling server actions with reactive state management, lifecycle callbacks, and two execution strategies. Provides `execute` (returns full result) and `executeAsync` (returns data directly or throws).

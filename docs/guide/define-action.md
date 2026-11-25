@@ -1,9 +1,13 @@
+---
+description: "Create a type-safe server action with defineAction: input and output validation, middleware, error handling, and a consistent response format."
+---
+
 # defineAction
 
 `defineAction` is the core server utility for creating type-safe API routes with automatic input validation, output validation, middleware, and a consistent response format. It wraps the H3 `defineEventHandler` and adds the validation and error-handling layers that make your API routes predictable and safe.
 
 ::: tip Working examples
-See `defineAction` used in a real application: [nuxt-actions-example/server/actions/](https://github.com/billymaulana/nuxt-actions-example/tree/master/server/actions) -- includes CRUD, validation, middleware, and streaming actions.
+See `defineAction` used in a real application: [the examples](/examples/) -- includes CRUD, validation, middleware, and streaming actions.
 :::
 
 ## Basic Usage with Zod
@@ -375,7 +379,7 @@ The handler function receives a single object with three properties:
 | Parameter | Type | Description |
 |---|---|---|
 | `input` | Inferred from the `input` schema's output type | The validated, transformed input. If no `input` schema is provided, this is `unknown`. |
-| `event` | `H3Event` | The raw H3 event. Use it for headers, cookies, IP, and other request metadata. |
+| `event` | `ServerEvent` | The request event: h3's `H3Event` on Nitro v2, the portable `RequestEvent` on Nitro v3. Use it for headers, cookies, IP, and other request metadata. See [Server Runtimes](/guide/server-runtimes). |
 | `ctx` | Inferred from the middleware chain | An object containing all context added by middleware via `next({ ctx: ... })`. Empty `{}` if no middleware is defined. |
 
 ## Response Format

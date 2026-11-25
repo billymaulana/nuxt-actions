@@ -1,11 +1,15 @@
+---
+description: "Install nuxt-actions, create your first validated server action, and call it from a Vue component with fully typed input and output."
+---
+
 # Getting Started
 
 This guide walks you through installing `nuxt-actions`, creating your first type-safe server action, and calling it from a Vue component. By the end you will have a working form that validates input on the server, returns typed data, and handles errors gracefully on the client.
 
 ## Prerequisites
 
-- Nuxt 3.7 or later (Nuxt 4 is fully supported)
-- Node.js 18+
+- Nuxt 3.7 or later. Nuxt 4 is fully supported, on Nitro v2 and on Nitro v3 ([Server Runtimes](/guide/server-runtimes)).
+- The Node.js version your Nuxt release requires: Node.js 22 or 24 for Nuxt 4.7.
 - One of the supported validation libraries (see below)
 
 ## Installation
@@ -277,17 +281,17 @@ You do not need to write any `import` statements for the module's utilities.
 
 ## Example Repository
 
-Want to see a complete working application? The **[nuxt-actions-example](https://github.com/billymaulana/nuxt-actions-example)** repository includes:
+Want to see a complete working application? The **[nuxt-actions-example](https://github.com/billymaulana/nuxt-actions-example)** repository includes these pages, and each one has a walkthrough in [Examples](/examples/):
 
 | Page | Feature | Composable |
 |------|---------|------------|
-| `/actions` | CRUD with typed refs | `useAction` |
-| `/optimistic` | Instant UI + rollback | `useOptimisticAction` |
-| `/streaming` | SSE text streaming | `useStreamAction` |
-| `/queries` | SSR reactive queries | `useActionQuery` |
-| `/middleware` | Auth + field validation | `defineMiddleware` |
-| `/builder` | Shared middleware chain | `createActionClient` |
-| `/errors` | Error codes + recovery | `createActionError` |
+| [`/actions`](/examples/actions) | CRUD with typed refs | `useAction` |
+| [`/optimistic`](/examples/optimistic) | Instant UI + rollback | `useOptimisticAction` |
+| [`/streaming`](/examples/streaming) | SSE text streaming | `useStreamAction` |
+| [`/queries`](/examples/queries) | SSR reactive queries | `useActionQuery` |
+| [`/middleware`](/examples/middleware) | Auth + field validation | `defineMiddleware` |
+| [`/auth`](/examples/auth) | Auth preset on the builder | `createActionClient` |
+| [`/resilience`](/examples/resilience) | Error codes + retry | `createActionError` |
 
 You can also try it instantly in the browser: **[Open in StackBlitz](https://stackblitz.com/github/billymaulana/nuxt-actions-example)**
 

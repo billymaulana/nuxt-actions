@@ -1,3 +1,7 @@
+---
+description: "Make duplicate requests safe: the idempotency option replays the stored result for a repeated Idempotency-Key instead of running the handler twice."
+---
+
 # Idempotency
 
 Double-clicked "Pay now" buttons, mobile retries on flaky networks, and duplicated webhooks all produce the same bug: the handler runs twice. The `idempotency` option makes duplicate requests safe — the first execution's result is stored and **replayed** for every duplicate, so the handler runs exactly once per key.

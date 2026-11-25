@@ -1,9 +1,13 @@
+---
+description: "Bind forms to server actions with useFormAction: v-model fields, field-level validation errors, dirty tracking, and reset."
+---
+
 # Form Actions
 
 Bind forms directly to server actions with field-level error mapping, dirty tracking, and reset.
 
 ::: tip Working example
-See form validation in the [example /middleware page](https://github.com/billymaulana/nuxt-actions-example/blob/master/pages/middleware.vue) -- login form with field-level errors.
+See `useFormAction` in the [Form Actions example](/examples/forms) -- a registration form with field-level errors, dirty tracking, and reset.
 :::
 
 ## Quick Start

@@ -1,3 +1,7 @@
+---
+description: "API reference for useActionQuery: SSR-capable action queries with reactive input, typed results, cache keys, and refresh."
+---
+
 # useActionQuery()
 
 SSR-capable query composable that wraps Nuxt's `useAsyncData` with automatic `ActionResult` unwrapping, reactive cache keys, and deterministic deduplication.

@@ -1,3 +1,7 @@
+---
+description: "Type reference for nuxt-actions: ActionResult, ActionError, middleware, handler, composable, and configuration types you can import."
+---
+
 # Type Reference
 
 Complete type definitions exported by `nuxt-actions`. All types are defined in `src/runtime/types.ts` and are available for import when needed.
@@ -228,7 +232,7 @@ The base context passed to middleware functions (without `next`).
 ```ts
 interface MiddlewareContext<TCtx = Record<string, unknown>> {
   /** The H3 request event. */
-  event: H3Event
+  event: ServerEvent
   /** Accumulated context from previous middleware. */
   ctx: TCtx
 }
@@ -286,7 +290,7 @@ type ActionHandler<TInput, TOutput, TCtx = Record<string, unknown>> = (params: {
   /** Validated input data (or raw input if no schema is provided). */
   input: TInput
   /** The H3 request event. */
-  event: H3Event
+  event: ServerEvent
   /** Accumulated middleware context. */
   ctx: TCtx
 }) => TOutput | Promise<TOutput>
@@ -781,9 +785,9 @@ interface IdempotencyConfig {
   /** Reject requests without a key (400 IDEMPOTENCY_KEY_REQUIRED). Default: false */
   required?: boolean
   /** Custom key resolver — overrides the header lookup. */
-  key?: (event: H3Event) => string | null | undefined | Promise<string | null | undefined>
+  key?: (event: ServerEvent) => string | null | undefined | Promise<string | null | undefined>
   /** Identity mixed into the store key (e.g. user id) — replay skips middleware/auth. */
-  scope?: (event: H3Event) => string | Promise<string>
+  scope?: (event: ServerEvent) => string | Promise<string>
   /** Pluggable storage. Default: bounded per-process in-memory store. */
   store?: IdempotencyStore
 }

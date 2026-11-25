@@ -1,3 +1,7 @@
+---
+description: "API reference for useInfiniteActionQuery: an SSR-rendered first page, client-side pages, next page cursors, and refresh."
+---
+
 # useInfiniteActionQuery()
 
 Composable for infinite scroll and cursor-based pagination with SSR support. Fetches the first page on the server via `useAsyncData`, then accumulates pages on the client.

@@ -1,3 +1,7 @@
+---
+description: "Keep queries fresh after writes: useActionMutation refetches the useActionQuery caches a mutation affects, by typed action reference or by tag."
+---
+
 # Cache Invalidation
 
 `useActionMutation` runs a write action and, on success, automatically refetches

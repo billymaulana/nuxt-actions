@@ -1,31 +1,37 @@
+---
+description: "Stream responses from server to client over Server-Sent Events with defineStreamAction and useStreamAction, for AI output and live progress."
+---
+
 # Streaming Actions
 
 Stream data from server to client in real-time using Server-Sent Events (SSE). Ideal for AI responses, progress updates, and live data feeds.
 
 ::: tip Live Example
-See streaming in action in the [example repository](https://github.com/billymaulana/nuxt-actions-example) -- run `pnpm dev` and visit `/streaming`.
+See streaming in action in the [Streaming example](/examples/streaming), or run `pnpm dev` in the [example repository](https://github.com/billymaulana/nuxt-actions-example) and visit `/streaming`.
 :::
 
 ## How It Works
 
-```
-Client                          Server
-  |                               |
-  |--- POST /api/_actions/ai ---->|
-  |                               | validates input
-  |                               | runs middleware
-  |<--- SSE: data: {"text":"H"} --|
-  |<--- SSE: data: {"text":"e"} --|
-  |<--- SSE: data: {"text":"l"} --|
-  |<--- SSE: event: done ---------|
-  |                               |
-```
+<FlowSequence from="Client" to="Server" :messages="[
+  { step: 1, direction: 'forward', text: 'POST /api/_actions/ai', caption: 'execute({ prompt }) sends the input as JSON' },
+  { step: 2, direction: 'note', text: 'Validate input', caption: 'Invalid input ends the stream with one error frame' },
+  { step: 3, direction: 'note', text: 'Run middleware', caption: 'Builds ctx, or ends the stream with an error frame' },
+  { step: 4, direction: 'back', text: 'content-type: text/event-stream', caption: 'The response opens while the handler keeps running' },
+  { group: 'For each stream.send(chunk)', messages: [
+    { step: 5, direction: 'back', text: 'data: {&quot;text&quot;:&quot;Hel&quot;}', caption: 'Appended to chunks' },
+    { direction: 'back', text: 'data: {&quot;text&quot;:&quot;lo&quot;}' },
+  ] },
+  { step: 6, direction: 'back', text: 'data: {&quot;__actions_done&quot;:true}', caption: 'stream.close() sets status to done' },
+]" />
 
-1. Client sends a POST request with validated input
-2. Server opens an SSE connection (`text/event-stream`)
-3. Handler calls `stream.send()` to push chunks
-4. Handler calls `stream.close()` to signal completion
-5. Client receives chunks reactively via `useStreamAction`
+1. `execute(input)` sends a POST request with the input to the action route.
+2. The server validates the input. If validation fails, the stream carries a single `__actions_error` frame with `VALIDATION_ERROR`, and `status` becomes `'error'`.
+3. Middleware runs and builds `ctx`. A middleware that throws an `ActionError` ends the stream the same way.
+4. The server opens a `text/event-stream` response right away and keeps running the handler in the background.
+5. Each `stream.send(chunk)` writes one `data:` frame. `useStreamAction` parses it and appends it to `chunks`.
+6. `stream.close()` writes a final `__actions_done` frame and closes the connection. `status` becomes `'done'` and `onDone` receives every chunk.
+
+If the handler throws, the client receives an `__actions_error` frame instead of the done frame. Calling `stop()` on the client aborts the request, and `stream.signal` on the server is aborted as well.
 
 ## Server: `defineStreamAction`
 

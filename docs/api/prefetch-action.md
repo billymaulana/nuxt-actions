@@ -1,3 +1,7 @@
+---
+description: "API reference for prefetchAction: warm the Nuxt data cache for an action query so useActionQuery skips its first request."
+---
+
 # prefetchAction()
 
 Pre-warm the Nuxt data cache for an action query. Fetches the result and stores it under the same cache key that `useActionQuery` uses, so when the composable mounts it skips the initial network request.
