@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import { ref, computed, readonly, toValue, onScopeDispose } from 'vue'
+import { ref, computed, readonly, toValue, watch, onScopeDispose } from 'vue'
 import { useNuxtApp } from '#app'
 import type {
   ActionStatus,
@@ -69,6 +69,22 @@ export function useOptimisticAction(
   const error = ref<ActionError | null>(null)
   const status = ref<ActionStatus>('idle')
 
+  let currentDataChanged = false
+  let applyingUpdate = false
+
+  watch(() => toValue(options.currentData), (value) => {
+    if (applyingUpdate) return
+    if (status.value === 'executing') currentDataChanged = true
+    else optimisticData.value = value
+  }, { deep: true, flush: 'sync' })
+
+  /** Whether currentData changed while a call was running; reading it clears the flag. */
+  function takeCurrentDataChange(): boolean {
+    const changed = currentDataChanged
+    currentDataChanged = false
+    return changed
+  }
+
   const isIdle = computed(() => status.value === 'idle')
   const isExecuting = computed(() => status.value === 'executing')
   const hasSucceeded = computed(() => status.value === 'success')
@@ -94,17 +110,26 @@ export function useOptimisticAction(
     // Uses JSON round-trip instead of structuredClone because Vue reactive proxies are not cloneable,
     // and optimistic data is always JSON-serializable (it round-trips through HTTP).
     const snapshot = JSON.parse(JSON.stringify(optimisticData.value))
+    const rollback = () => {
+      optimisticData.value = takeCurrentDataChange() ? toValue(options.currentData) : snapshot
+    }
 
     // Apply optimistic update from latest optimistic state (not currentData)
     // to correctly chain rapid successive calls
-    optimisticData.value = options.updateFn(input, optimisticData.value)
+    applyingUpdate = true
+    try {
+      optimisticData.value = options.updateFn(input, optimisticData.value)
+    }
+    finally {
+      applyingUpdate = false
+    }
+
+    status.value = 'executing'
+    error.value = null
 
     options.onExecute?.(input)
     const startedAt = Date.now()
     emitActionHook(nuxtApp, 'action:start', { path, method, input })
-
-    status.value = 'executing'
-    error.value = null
 
     /*
      * ofetch ignores its timeout option when an external signal is provided,
@@ -143,8 +168,15 @@ export function useOptimisticAction(
       if (result.success) {
         const transformed = options.transform ? options.transform(result.data as never) : result.data
         if (isLatest()) {
+          const rebase = takeCurrentDataChange()
           data.value = transformed
-          optimisticData.value = transformed
+          if (options.reconcile) {
+            const base = rebase ? options.updateFn(input, toValue(options.currentData)) : optimisticData.value
+            optimisticData.value = options.reconcile(transformed, base)
+          }
+          else {
+            optimisticData.value = transformed
+          }
           status.value = 'success'
         }
         options.onSuccess?.(result.data)
@@ -155,7 +187,7 @@ export function useOptimisticAction(
       }
       else {
         if (isLatest()) {
-          optimisticData.value = snapshot
+          rollback()
           error.value = result.error
           status.value = 'error'
         }
@@ -187,7 +219,7 @@ export function useOptimisticAction(
             statusCode: 408,
           }
           if (isLatest()) {
-            optimisticData.value = snapshot
+            rollback()
             error.value = timeoutError
             status.value = 'error'
           }
@@ -216,7 +248,7 @@ export function useOptimisticAction(
       }
 
       if (isLatest()) {
-        optimisticData.value = snapshot
+        rollback()
         error.value = actionError
         status.value = 'error'
       }
@@ -251,6 +283,7 @@ export function useOptimisticAction(
 
   function reset() {
     abortAll()
+    currentDataChanged = false
     optimisticData.value = toValue(options.currentData)
     data.value = null
     error.value = null
@@ -271,8 +304,9 @@ export function useOptimisticAction(
       (wrappedExecute as { cancel: () => void }).cancel()
     }
     abortAll()
-    // Explicit cancel returns to idle without rolling back optimistic data.
+    // Cancel keeps the optimistic data unless currentData changed while the call was running.
     if (status.value === 'executing') status.value = 'idle'
+    if (takeCurrentDataChange()) optimisticData.value = toValue(options.currentData)
   }
 
   // Clean up timers and in-flight requests on scope dispose

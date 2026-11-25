@@ -1,4 +1,4 @@
-import type { ServerEvent } from '../internal/nitro-compact'
+import type { ServerEvent } from '../internal/server-runtime'
 import type { ActionMiddleware, AuthMiddlewareOptions } from '../../types'
 import { createActionError } from './defineAction'
 

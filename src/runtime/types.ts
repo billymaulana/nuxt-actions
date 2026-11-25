@@ -1,5 +1,7 @@
 import type { Ref, ComputedRef } from 'vue'
-import type { ServerEvent } from './server/internal/nitro-compact'
+import type { ServerEvent } from './server/internal/server-runtime'
+
+export type { ServerEvent }
 
 // ── Standard Schema v1 ────────────────────────────────────────────
 // Inlined to avoid external dependency. Compatible with Zod 3.24+,
@@ -162,7 +164,7 @@ export interface AuthMiddlewareOptions {
  * generated #actions template can infer end-to-end types for builder actions.
  */
 export type BuiltAction<TInput, TOutput>
-  = ReturnType<typeof import('./server/internal/nitro-compact')['defineEventHandler']> & {
+  = ReturnType<typeof import('./server/internal/server-runtime')['defineEventHandler']> & {
     _execute: (rawInput: unknown, event: ServerEvent) => Promise<ActionResult<TOutput>>
     _types: { readonly input: TInput, readonly output: TOutput }
   }
@@ -310,6 +312,8 @@ export interface UseOptimisticActionOptions<TInput, TOutput, TData = TOutput> {
   updateFn: (input: TInput, currentData: TData) => TData
   /** Transform response data before storing in `data` ref */
   transform?: (data: TOutput) => TOutput
+  /** Merge the server response into the optimistic state. Without it, the response replaces `optimisticData`. */
+  reconcile?: (data: TOutput, optimisticData: TData) => TData
   onSuccess?: (data: TOutput) => void
   onError?: (error: ActionError) => void
   onSettled?: (result: ActionResult<TOutput>) => void

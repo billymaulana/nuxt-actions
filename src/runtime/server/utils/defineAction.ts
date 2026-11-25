@@ -1,5 +1,5 @@
-import { defineEventHandler, getHeader, getQuery, readBody, readMultipartFormData, getRequestMethod } from '../internal/nitro-compact'
-import type { ServerEvent, MultiPartData } from '../internal/nitro-compact'
+import { defineEventHandler, getHeader, getQuery, readBody, readMultipartFormData, getRequestMethod } from '../internal/server-runtime'
+import type { ServerEvent, MultiPartData } from '../internal/server-runtime'
 import type {
   ActionError,
   ActionHandler,
@@ -200,7 +200,7 @@ export function defineAction<
   const handler = defineEventHandler(async (event: ServerEvent) => {
     let rawInput: unknown
     try {
-      rawInput = await parseInput(event)
+      rawInput = await parseActionInput(event)
     }
     catch (parseError: unknown) {
       if (isActionError(parseError)) {
@@ -237,8 +237,8 @@ export function createActionError(opts: {
     message: opts.message,
     statusCode: opts.statusCode ?? 400,
     fieldErrors: opts.fieldErrors,
-    __isActionError: true,
   }
+  Object.defineProperty(error, '__isActionError', { value: true, enumerable: false })
   return error as ActionError & { __isActionError: true }
 }
 
@@ -262,7 +262,7 @@ export function foldMultipartData(parts: MultiPartData[]): Record<string, unknow
   return out
 }
 
-async function parseInput(event: ServerEvent): Promise<unknown> {
+export async function parseActionInput(event: ServerEvent): Promise<unknown> {
   const method = getRequestMethod(event).toUpperCase()
 
   if (method === 'GET' || method === 'HEAD') {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { getHeader, setHeader, getRequestPath } from '../internal/nitro-compact'
-import type { ServerEvent } from '../internal/nitro-compact'
+import { getHeader, setHeader, getRequestPath } from '../internal/server-runtime'
+import type { ServerEvent } from '../internal/server-runtime'
 import type {
   ActionResult,
   IdempotencyConfig,

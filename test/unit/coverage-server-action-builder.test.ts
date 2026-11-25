@@ -176,8 +176,8 @@ describe('defineAction multipart parsing', () => {
         message: 'Invalid multipart form data',
         statusCode: 400,
         fieldErrors: undefined,
-        __isActionError: true,
       },
     })
+    expect(JSON.stringify(result)).not.toContain('__isActionError')
   })
 })

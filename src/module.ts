@@ -1,14 +1,15 @@
 import { readdirSync, existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import * as kit from '@nuxt/kit'
 import {
   defineNuxtModule,
+  addServerImports,
   addServerImportsDir,
   addImports,
   addTemplate,
   createResolver,
   useLogger,
   updateTemplates,
-  resolveServerVariant,
 } from '@nuxt/kit'
 import { setupDevtools } from './devtools'
 
@@ -158,52 +159,73 @@ function scanActionFiles(
  * Generate the virtual handler code for a scanned action.
  * This creates a Nitro handler that imports and calls the action's _execute method.
  */
-function generateHandlerCode(action: ScannedAction): string {
-  // Safely escape the import path using JSON.stringify
-  const importPath = JSON.stringify(action.filePath.split('\\').join('/'))
+function generateHandlerCode(action: ScannedAction, defineActionPath: string): string {
+  const actionImport = JSON.stringify(action.filePath.split('\\').join('/'))
+  const runtimeImport = JSON.stringify(defineActionPath.split('\\').join('/'))
   return [
-    `import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData, getRequestMethod } from '#nuxt-actions/nitro-compact'`,
-    `import actionModule from ${importPath}`,
-    ``,
-    `function _foldMultipart(parts) {`,
-    `  const out = {}`,
-    `  for (const p of parts) {`,
-    `    if (!p.name) continue`,
-    `    const v = p.filename !== undefined ? { filename: p.filename, type: p.type || 'application/octet-stream', data: p.data } : p.data.toString('utf-8')`,
-    `    if (p.name in out) { out[p.name] = Array.isArray(out[p.name]) ? [...out[p.name], v] : [out[p.name], v] }`,
-    `    else { out[p.name] = v }`,
-    `  }`,
-    `  return out`,
-    `}`,
+    `import { defineEventHandler } from '#nuxt-actions/server-runtime'`,
+    `import { isActionError, parseActionInput } from ${runtimeImport}`,
+    `import actionModule from ${actionImport}`,
     ``,
     `export default defineEventHandler(async (event) => {`,
-    `  if (typeof actionModule._execute === 'function') {`,
-    `    let rawInput`,
-    `    try {`,
-    `      const method = getRequestMethod(event).toUpperCase()`,
-    `      const ct = getHeader(event, 'content-type') || ''`,
-    `      if (method === 'GET' || method === 'HEAD') {`,
-    `        rawInput = getQuery(event)`,
-    `      } else if (ct.includes('multipart/form-data')) {`,
-    `        rawInput = _foldMultipart((await readMultipartFormData(event)) || [])`,
-    `      } else {`,
-    `        rawInput = (await readBody(event) ?? {})`,
-    `      }`,
-    `    } catch (parseError) {`,
-    `      const ct = getHeader(event, 'content-type') || ''`,
-    `      if (ct.includes('application/json')) {`,
-    `        return { success: false, error: { code: 'PARSE_ERROR', message: 'Invalid JSON in request body', statusCode: 400 } }`,
-    `      }`,
-    `      if (ct.includes('multipart/form-data')) {`,
-    `        return { success: false, error: { code: 'PARSE_ERROR', message: 'Invalid multipart form data', statusCode: 400 } }`,
-    `      }`,
-    `      rawInput = {}`,
-    `    }`,
-    `    return actionModule._execute(rawInput, event)`,
+    `  if (typeof actionModule._execute !== 'function') {`,
+    `    return actionModule(event)`,
     `  }`,
-    `  return actionModule(event)`,
+    `  let rawInput`,
+    `  try {`,
+    `    rawInput = await parseActionInput(event)`,
+    `  }`,
+    `  catch (error) {`,
+    `    if (isActionError(error)) {`,
+    `      return { success: false, error }`,
+    `    }`,
+    `    throw error`,
+    `  }`,
+    `  return actionModule._execute(rawInput, event)`,
     `})`,
   ].join('\n')
+}
+
+type ResolveServerVariant = (variants: { nitro2: string, nuxt: string }) => string | undefined
+
+/**
+ * Pick the server runtime the host prefers: `nitro2` (h3 v1) or `portable`
+ * (`nuxt/server`). Hosts without variant support run the nitro2 runtime.
+ */
+export function resolveServerRuntime(
+  paths: { nitro2: string, portable: string },
+  resolveVariant: ResolveServerVariant | undefined,
+  onError?: (error: unknown) => void,
+): string {
+  if (typeof resolveVariant !== 'function') return paths.nitro2
+  try {
+    return resolveVariant({ nitro2: paths.nitro2, nuxt: paths.portable }) ?? paths.nitro2
+  }
+  catch (error) {
+    onError?.(error)
+    return paths.nitro2
+  }
+}
+
+interface NitroHandlerRegistration {
+  route: string
+  method: string
+  handler: string
+}
+
+/**
+ * Nitro v2 types expect lowercase methods and Nitro v3 types uppercase ones;
+ * both routers accept lowercase at runtime.
+ */
+function registerNitroHandlers(
+  nitroConfig: { handlers?: unknown[], virtual?: Record<string, unknown> },
+  handlers: NitroHandlerRegistration[],
+  virtual: Record<string, () => string>,
+): void {
+  nitroConfig.virtual ||= {}
+  Object.assign(nitroConfig.virtual, virtual)
+  nitroConfig.handlers ||= []
+  nitroConfig.handlers.push(...handlers)
 }
 
 /**
@@ -254,6 +276,7 @@ export default defineNuxtModule<ModuleOptions>({
     configKey: 'actions',
     compatibility: {
       nuxt: '^3.7.0 || ^4.0.0',
+      server: 'nuxt',
     },
   },
   defaults: {
@@ -267,15 +290,19 @@ export default defineNuxtModule<ModuleOptions>({
     const logger = useLogger('nuxt-actions')
     const resolver = createResolver(import.meta.url)
 
-    // Virtual import alias for server compact
-    const nitro2 = resolver.resolve('./runtime/server/internal/nitro2')
-    nuxt.options.alias['#nuxt-actions/nitro-compact'] = resolveServerVariant({
-      nitro2,
-      nuxt: resolver.resolve('./runtime/server/internal/nitro3'),
-    }) ?? nitro2
+    nuxt.options.alias['#nuxt-actions/server-runtime'] = resolveServerRuntime(
+      {
+        nitro2: resolver.resolve('./runtime/server/internal/nitro2'),
+        portable: resolver.resolve('./runtime/server/internal/portable'),
+      },
+      // Older @nuxt/kit versions do not export resolveServerVariant.
+      Reflect.get(kit, 'resolveServerVariant'),
+      error => logger.warn('Could not pick a server runtime, falling back to the Nitro v2 runtime.', error),
+    )
 
     // Auto-import server utilities: defineAction, createActionError, defineMiddleware
     addServerImportsDir(resolver.resolve('./runtime/server/utils'))
+    addServerImports([{ name: 'ActionFile', from: resolver.resolve('./runtime/types'), type: true }])
 
     /*
      * Composables are registered by explicit name so internal helpers in
@@ -348,19 +375,20 @@ export default defineNuxtModule<ModuleOptions>({
     // ── Register Nitro virtual handlers ────────────────────────
 
     if (scannedActions.length > 0) {
+      const defineActionPath = resolver.resolve('./runtime/server/utils/defineAction')
       nuxt.hook('nitro:config', (nitroConfig) => {
-        nitroConfig.virtual = nitroConfig.virtual || {}
-        nitroConfig.handlers = nitroConfig.handlers || []
-
+        const handlers: NitroHandlerRegistration[] = []
+        const virtual: Record<string, () => string> = {}
         for (const action of scannedActions) {
           const virtualId = `#actions-handler/${action.path}`
-          nitroConfig.virtual[virtualId] = () => generateHandlerCode(action)
-          nitroConfig.handlers.push({
+          virtual[virtualId] = () => generateHandlerCode(action, defineActionPath)
+          handlers.push({
             route: `/api/_actions/${action.path}`,
-            method: action.method.toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head' | 'connect' | 'options' | 'trace',
+            method: action.method.toLowerCase(),
             handler: virtualId,
           })
         }
+        registerNitroHandlers(nitroConfig, handlers, virtual)
       })
     }
 
@@ -378,13 +406,13 @@ export default defineNuxtModule<ModuleOptions>({
       const jsonHandler = resolver.resolve('./runtime/server/openapi-json')
       const uiHandler = resolver.resolve('./runtime/server/openapi-ui')
       nuxt.hook('nitro:config', (nitroConfig) => {
-        nitroConfig.virtual = nitroConfig.virtual || {}
-        nitroConfig.handlers = nitroConfig.handlers || []
-        nitroConfig.virtual['#actions-openapi-registry'] = () => generateOpenApiRegistry(scannedActions, info, swaggerHtml)
-        nitroConfig.handlers.push({ route: jsonPath, method: 'get', handler: jsonHandler })
+        const handlers: NitroHandlerRegistration[] = [{ route: jsonPath, method: 'get', handler: jsonHandler }]
         if (uiPath) {
-          nitroConfig.handlers.push({ route: uiPath, method: 'get', handler: uiHandler })
+          handlers.push({ route: uiPath, method: 'get', handler: uiHandler })
         }
+        registerNitroHandlers(nitroConfig, handlers, {
+          '#actions-openapi-registry': () => generateOpenApiRegistry(scannedActions, info, swaggerHtml),
+        })
       })
     }
 

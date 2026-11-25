@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    include: ['test/unit/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/runtime/**/*.ts'],
@@ -18,7 +19,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '#nuxt-actions/nitro-compact': resolve('./src/runtime/server/internal/nitro2.ts'),
+      '#nuxt-actions/server-runtime': resolve('./src/runtime/server/internal/nitro2.ts'),
     },
   },
 })

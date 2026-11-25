@@ -151,6 +151,15 @@ describe('UseOptimisticActionReturn types', () => {
     type Return = UseOptimisticActionReturn<{ id: number }, { count: number }>
     expectTypeOf<Parameters<Return['execute']>[0]>().toEqualTypeOf<{ id: number }>()
   })
+
+  it('reconcile receives the action output and returns the optimistic state type', () => {
+    type Options = UseOptimisticActionOptions<{ id: number }, { id: number, done: boolean }, Array<{ id: number, done: boolean, title: string }>>
+    expectTypeOf<Parameters<NonNullable<Options['reconcile']>>>().toEqualTypeOf<[
+      { id: number, done: boolean },
+      Array<{ id: number, done: boolean, title: string }>,
+    ]>()
+    expectTypeOf<ReturnType<NonNullable<Options['reconcile']>>>().toEqualTypeOf<Array<{ id: number, done: boolean, title: string }>>()
+  })
 })
 
 describe('UseFormActionReturn types', () => {

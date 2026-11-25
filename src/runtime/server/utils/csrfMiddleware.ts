@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { getCookie, setCookie, getHeader, getRequestMethod } from '../internal/nitro-compact'
+import { getCookie, setCookie, getHeader, getRequestMethod } from '../internal/server-runtime'
 import type { CsrfConfig, ActionMiddleware } from '../../types'
 import { createActionError } from './defineAction'
 
@@ -9,12 +9,13 @@ const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 /**
  * CSRF token protection middleware for mutation actions.
  *
- * On safe requests (GET, HEAD, OPTIONS), generates a cryptographic token and
- * sets it as an httpOnly cookie. On mutation requests (POST, PUT, PATCH, DELETE),
- * validates that the token in the request header matches the cookie value.
+ * On safe requests (GET, HEAD, OPTIONS), keeps the token already stored in the
+ * cookie or creates a new one, and sets it as a cookie that client code can read.
+ * On mutation requests (POST, PUT, PATCH, DELETE), validates that the token in
+ * the request header matches the cookie value.
  *
- * The client must read the CSRF token from the cookie (or a dedicated endpoint)
- * and include it in the configured header on every mutation request.
+ * The client reads the token from the cookie and sends it in the configured
+ * header on every mutation request. Handlers receive it as `ctx.csrfToken`.
  *
  * @param config - Optional CSRF configuration overrides.
  * @returns An `ActionMiddleware` that enforces CSRF protection.
@@ -49,20 +50,21 @@ export function csrfMiddleware(config?: CsrfConfig): ActionMiddleware {
   const cookieName = config?.cookieName ?? '_csrf'
   const headerName = config?.headerName ?? 'x-csrf-token'
   const tokenLength = config?.tokenLength ?? 32
+  const tokenPattern = new RegExp(`^[a-f0-9]{${tokenLength * 2}}$`)
 
   return async ({ event, next }) => {
     const method = getRequestMethod(event).toUpperCase()
 
     if (!MUTATION_METHODS.has(method)) {
-      // Safe request — generate and set a CSRF token cookie
-      const token = randomBytes(tokenLength).toString('hex')
+      const existing = getCookie(event, cookieName)
+      const token = existing && tokenPattern.test(existing) ? existing : randomBytes(tokenLength).toString('hex')
       setCookie(event, cookieName, token, {
-        httpOnly: true,
+        httpOnly: false,
         sameSite: 'strict',
         path: '/',
         secure: true,
       })
-      return next()
+      return next({ ctx: { csrfToken: token } })
     }
 
     // Mutation request — validate CSRF token
@@ -86,7 +88,15 @@ export function csrfMiddleware(config?: CsrfConfig): ActionMiddleware {
       })
     }
 
-    return next()
+    if (!tokenPattern.test(cookieToken)) {
+      throw createActionError({
+        code: 'CSRF_ERROR',
+        message: 'CSRF token invalid',
+        statusCode: 403,
+      })
+    }
+
+    return next({ ctx: { csrfToken: cookieToken } })
   }
 }
 

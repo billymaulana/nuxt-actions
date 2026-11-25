@@ -1,18 +1,8 @@
-import type { EventStream, H3Event, MultiPartData } from 'h3'
-import {
-  createEventStream,
-  defineEventHandler,
-  getCookie,
-  getHeader,
-  getQuery,
-  getRequestIP,
-  readBody,
-  readMultipartFormData,
-  setCookie,
-  setHeader,
-} from 'h3'
+import type { H3Event } from 'h3'
 
 export type ServerEvent = H3Event
+
+export type { EventStream, MultiPartData } from 'h3'
 
 export {
   createEventStream,
@@ -25,14 +15,13 @@ export {
   readMultipartFormData,
   setCookie,
   setHeader,
-  type EventStream,
-  type MultiPartData,
-}
+} from 'h3'
 
 export function getRequestMethod(event: ServerEvent): string {
   return event.method
 }
 
 export function getRequestPath(event: ServerEvent): string {
-  return event.path
+  const queryStart = event.path.indexOf('?')
+  return queryStart === -1 ? event.path : event.path.slice(0, queryStart)
 }

@@ -1,16 +1,20 @@
 import { z } from 'zod'
 
+const fileSchema = z.custom<ActionFile>(
+  value => typeof value === 'object' && value !== null && 'filename' in value && 'data' in value,
+  'Expected a file',
+)
+
 export default defineAction({
   input: z.object({
     title: z.string(),
-    file: z.any(),
+    file: fileSchema.optional(),
   }),
   handler: async ({ input }) => {
-    const file = input.file as { filename: string, data: { length: number } } | undefined
     return {
       title: input.title,
-      filename: file?.filename ?? null,
-      size: file?.data?.length ?? 0,
+      filename: input.file?.filename ?? null,
+      size: input.file?.data.length ?? 0,
     }
   },
 })

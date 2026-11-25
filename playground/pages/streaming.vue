@@ -35,7 +35,7 @@
     <section v-if="streamAction.status.value !== 'idle'">
       <div style="background: #111; padding: 16px; border-radius: 8px; min-height: 100px; white-space: pre-wrap; font-size: 14px; line-height: 1.8;">
         <span
-          v-for="(chunk, i) in (streamAction.chunks.value as Array<{text: string}>)"
+          v-for="(chunk, i) in (streamAction.chunks.value as Array<{ text: string }>)"
           :key="i"
         >{{ chunk.text }}</span>
         <span
