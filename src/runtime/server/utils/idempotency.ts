@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { getHeader, setHeader } from 'h3'
-import type { H3Event } from 'h3'
+import { getHeader, setHeader, getRequestPath } from '../internal/server-runtime'
+import type { ServerEvent } from '../internal/server-runtime'
 import type {
   ActionResult,
   IdempotencyConfig,
@@ -94,7 +94,7 @@ const inflight = new Map<string, { fingerprint: string, promise: Promise<ActionR
  * so one client can never replay another client's result.
  */
 export async function executeWithIdempotency(
-  event: H3Event,
+  event: ServerEvent,
   rawInput: unknown,
   config: IdempotencyConfig,
   run: () => Promise<ActionResult<unknown>>,
@@ -131,7 +131,7 @@ export async function executeWithIdempotency(
     return run()
   }
 
-  const storeKey = composeStoreKey(event.path, scope, rawKey)
+  const storeKey = composeStoreKey(getRequestPath(event), scope, rawKey)
   const fingerprint = fingerprintOf(rawInput)
   const store = config.store ?? defaultStore
   const ttl = config.ttl ?? DEFAULT_TTL

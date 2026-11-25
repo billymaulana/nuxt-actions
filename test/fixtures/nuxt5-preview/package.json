@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "nuxt5-preview",
+  "type": "module",
+  "dependencies": {
+    "nitro": "*"
+  }
+}

@@ -1,14 +1,14 @@
-import { defineEventHandler, readBody, getQuery, getHeader, readMultipartFormData } from 'h3'
-import type { H3Event, MultiPartData } from 'h3'
+import { defineEventHandler, getHeader, getQuery, readBody, readMultipartFormData, getRequestMethod } from '../internal/server-runtime'
+import type { ServerEvent, MultiPartData } from '../internal/server-runtime'
 import type {
-  StandardSchemaV1,
-  InferOutput,
-  ActionMiddleware,
-  ActionHandler,
   ActionError,
+  ActionHandler,
   ActionMetadata,
+  ActionMiddleware,
   ActionResult,
   IdempotencyConfig,
+  InferOutput,
+  StandardSchemaV1,
 } from '../../types'
 import { executeWithIdempotency } from './idempotency'
 
@@ -72,7 +72,7 @@ export function defineAction<
 >(options: DefineActionOptions<TInputSchema, TOutput, TCtx, TOutputSchema>) {
   type TInput = TInputSchema extends StandardSchemaV1<infer I, unknown> ? I : unknown
 
-  async function _execute(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
+  async function _execute(rawInput: unknown, event: ServerEvent): Promise<ActionResult<TOutput>> {
     if (options.idempotency) {
       return executeWithIdempotency(
         event,
@@ -84,7 +84,7 @@ export function defineAction<
     return _run(rawInput, event)
   }
 
-  async function _run(rawInput: unknown, event: H3Event): Promise<ActionResult<TOutput>> {
+  async function _run(rawInput: unknown, event: ServerEvent): Promise<ActionResult<TOutput>> {
     try {
       // 1. Validate input with Standard Schema
       let input = rawInput
@@ -197,10 +197,10 @@ export function defineAction<
     }
   }
 
-  const handler = defineEventHandler(async (event: H3Event) => {
+  const handler = defineEventHandler(async (event: ServerEvent) => {
     let rawInput: unknown
     try {
-      rawInput = await parseInput(event)
+      rawInput = await parseActionInput(event)
     }
     catch (parseError: unknown) {
       if (isActionError(parseError)) {
@@ -237,8 +237,8 @@ export function createActionError(opts: {
     message: opts.message,
     statusCode: opts.statusCode ?? 400,
     fieldErrors: opts.fieldErrors,
-    __isActionError: true,
   }
+  Object.defineProperty(error, '__isActionError', { value: true, enumerable: false })
   return error as ActionError & { __isActionError: true }
 }
 
@@ -262,8 +262,8 @@ export function foldMultipartData(parts: MultiPartData[]): Record<string, unknow
   return out
 }
 
-async function parseInput(event: H3Event): Promise<unknown> {
-  const method = event.method.toUpperCase()
+export async function parseActionInput(event: ServerEvent): Promise<unknown> {
+  const method = getRequestMethod(event).toUpperCase()
 
   if (method === 'GET' || method === 'HEAD') {
     return getQuery(event)
@@ -374,7 +374,7 @@ function deepMerge(
 }
 
 export async function runMiddleware(
-  event: H3Event,
+  event: ServerEvent,
   middlewares: ActionMiddleware[],
   metadata: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {

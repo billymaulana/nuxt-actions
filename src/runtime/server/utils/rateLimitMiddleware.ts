@@ -1,4 +1,4 @@
-import { getRequestIP } from 'h3'
+import { getRequestIP } from '../internal/server-runtime'
 import type { RateLimitConfig, ActionMiddleware } from '../../types'
 import { createActionError } from './defineAction'
 

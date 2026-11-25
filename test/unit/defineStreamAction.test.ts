@@ -204,7 +204,7 @@ describe('defineStreamAction', () => {
       expect(mockEventStream.close).toHaveBeenCalled()
     })
 
-    it('awaits push and close before send on validation error', async () => {
+    it('sends the stream before pushing the validation error', async () => {
       mockGetQuery.mockReturnValue({})
       const callOrder: string[] = []
 
@@ -236,8 +236,28 @@ describe('defineStreamAction', () => {
       const eventHandler = action as unknown as (event: H3Event) => Promise<unknown>
       await eventHandler(createMockEvent('GET'))
 
-      // push and close must complete before send
-      expect(callOrder).toEqual(['push', 'close', 'send'])
+      expect(callOrder).toEqual(['send', 'push', 'close'])
+    })
+
+    it('still returns the stream response when the error frame cannot be written', async () => {
+      mockGetQuery.mockReturnValue({})
+      mockEventStream.push.mockRejectedValue(new Error('client disconnected'))
+      mockEventStream.send.mockResolvedValue('sent')
+
+      const action = defineStreamAction({
+        input: {
+          '~standard': {
+            version: 1 as const,
+            vendor: 'test',
+            validate: vi.fn().mockResolvedValue({ issues: [{ message: 'Required', path: ['title'] }] }),
+          },
+        },
+        handler: async () => {},
+      })
+
+      const eventHandler = action as unknown as (event: H3Event) => Promise<unknown>
+      await expect(eventHandler(createMockEvent('GET'))).resolves.toBe('sent')
+      expect(mockEventStream.close).not.toHaveBeenCalled()
     })
 
     it('passes validated input to handler', async () => {
