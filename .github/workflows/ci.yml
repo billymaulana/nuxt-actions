@@ -21,11 +21,11 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
         run: pnpm run lint
@@ -40,27 +40,29 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare module
         run: pnpm run dev:prepare
+
+      - name: Type check module and playground
+        run: pnpm run test:types
 
       - name: Build module
         run: pnpm run prepack
 
       - name: Run type tests
         run: pnpm run test:type-tests
-        continue-on-error: false
 
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20, 22]
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v6
 
@@ -73,25 +75,28 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare module
         run: pnpm run dev:prepare
 
       - name: Run unit tests with coverage
-        run: pnpm vitest run test/unit/ --coverage
+        run: pnpm run test:coverage
 
       - name: Upload coverage to Codecov
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.node-version == 22
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.node-version == 24
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/coverage-final.json
           fail_ci_if_error: false
 
-  build:
+  e2e:
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [nitro-v2, nitro-v3, nitro-v3-strict, nitro-v3-dev, nuxt5-preview]
     steps:
       - uses: actions/checkout@v6
 
@@ -100,11 +105,34 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare module
+        run: pnpm run dev:prepare
+
+      - name: Run e2e tests on ${{ matrix.runtime }}
+        run: pnpm run test:e2e test/e2e/${{ matrix.runtime }}.test.ts
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, e2e]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Prepare module
         run: pnpm run dev:prepare
@@ -117,3 +145,9 @@ jobs:
           test -f dist/module.mjs || (echo "dist/module.mjs missing" && exit 1)
           test -f dist/types.d.mts || (echo "dist/types.d.mts missing" && exit 1)
           echo "Build output verified"
+
+      - name: Build playground
+        run: pnpm run dev:build
+
+      - name: Build docs
+        run: pnpm run docs:build
